@@ -412,6 +412,10 @@ type OpenChannel struct {
 	// for which we are the initiator.
 	FundingTxn *wire.MsgTx
 
+	// IsManuallyDisabled indicates whether a channel is manually disabled or not.
+	// Used to persist state on restart.
+	IsManuallyDisabled bool
+
 	// TODO(roasbeef): eww
 	Db *DB
 

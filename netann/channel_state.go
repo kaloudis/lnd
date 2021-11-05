@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/btcsuite/btcd/wire"
+	"github.com/lightningnetwork/lnd/channeldb"
 )
 
 // ChanStatus is a type that enumerates the possible states a ChanStatusManager
@@ -62,9 +63,13 @@ type ChannelState struct {
 type channelStates map[wire.OutPoint]ChannelState
 
 // markEnabled creates a channelState using ChanStatusEnabled.
-func (s *channelStates) markEnabled(outpoint wire.OutPoint) {
-	(*s)[outpoint] = ChannelState{
+func (s *ChanStatusManager) markEnabled(outpoint wire.OutPoint, manual bool) {
+	(*s).chanStates[outpoint] = ChannelState{
 		Status: ChanStatusEnabled,
+	}
+
+	if manual {
+		channeldb.WriteManuallyDisabled(outPoint, false)
 	}
 }
 
@@ -81,6 +86,7 @@ func (s *channelStates) markManuallyDisabled(outpoint wire.OutPoint) {
 	(*s)[outpoint] = ChannelState{
 		Status: ChanStatusManuallyDisabled,
 	}
+	channeldb.WriteManuallyDisabled(outPoint, true)
 }
 
 // markPendingDisabled creates a channelState using ChanStatusPendingDisabled

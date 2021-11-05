@@ -407,6 +407,7 @@ func (m *ChanStatusManager) processEnableRequest(outpoint wire.OutPoint,
 		if !manual {
 			return ErrEnableManuallyDisabledChan
 		}
+		// write to db here
 		fallthrough
 
 	case ChanStatusDisabled:
@@ -418,7 +419,7 @@ func (m *ChanStatusManager) processEnableRequest(outpoint wire.OutPoint,
 		}
 	}
 
-	m.chanStates.markEnabled(outpoint)
+	m.markEnabled(outpoint, manual)
 
 	return nil
 }
@@ -459,6 +460,7 @@ func (m *ChanStatusManager) processDisableRequest(outpoint wire.OutPoint,
 	// interface via a db lookup, or on startup.
 	if manual {
 		m.chanStates.markManuallyDisabled(outpoint)
+		// write to db here
 	} else if status != ChanStatusManuallyDisabled {
 		delete(m.chanStates, outpoint)
 	}
@@ -666,6 +668,9 @@ func (m *ChanStatusManager) loadInitialChanState(
 
 	// Determine the channel's starting status by inspecting the disable bit
 	// on last announcement we sent out.
+
+	// TO DO lastUpdate.ChannelFlags&lnwire.ChanStatusManuallyDisabled == 0
+
 	var initialStatus ChanStatus
 	if lastUpdate.ChannelFlags&lnwire.ChanUpdateDisabled == 0 {
 		initialStatus = ChanStatusEnabled

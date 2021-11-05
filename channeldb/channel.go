@@ -738,6 +738,10 @@ type OpenChannel struct {
 	// have private key isolation from lnd.
 	RevocationKeyLocator keychain.KeyLocator
 
+	// IsManuallyDisabled indicates whether a channel is manually disabled or not.
+	// Used to persist state on restart.
+	IsManuallyDisabled bool
+
 	// TODO(roasbeef): eww
 	Db *ChannelStateDB
 
@@ -3327,7 +3331,7 @@ func putChanInfo(chanBucket kvdb.RwBucket, channel *OpenChannel) error {
 		channel.chanStatus, channel.FundingBroadcastHeight,
 		channel.NumConfsRequired, channel.ChannelFlags,
 		channel.IdentityPub, channel.Capacity, channel.TotalMSatSent,
-		channel.TotalMSatReceived,
+		channel.TotalMSatReceived, channel.IsManuallyDisabled,
 	); err != nil {
 		return err
 	}
@@ -3776,4 +3780,76 @@ func DKeyLocator(r io.Reader, val interface{}, buf *[8]byte, l uint64) error {
 // 8 as KeyFamily is uint32 and the Index is uint32.
 func MakeKeyLocRecord(typ tlv.Type, keyLoc *keychain.KeyLocator) tlv.Record {
 	return tlv.MakeStaticRecord(typ, keyLoc, 8, EKeyLocator, DKeyLocator)
+}
+
+// putChanStatus appends the given status to the channel. fs is an optional
+// list of closures that are given the chanBucket in order to atomically add
+// extra information together with the new status.
+// TODO
+func (c *OpenChannel) putManuallyDisabled(status bool,
+	fs ...func(kvdb.RwBucket) error) error {
+
+	if err := kvdb.Update(c.Db.backend, func(tx kvdb.RwTx) error {
+		chanBucket, err := fetchChanBucketRw(
+			tx, c.IdentityPub, &c.FundingOutpoint, c.ChainHash,
+		)
+		if err != nil {
+			return err
+		}
+
+		channel, err := fetchOpenChannel(chanBucket, &c.FundingOutpoint)
+		if err != nil {
+			return err
+		}
+
+		// Add this status to the existing bitvector found in the DB.
+		channel.IsManuallyDisabled = status
+
+		if err := putOpenChannel(chanBucket, channel); err != nil {
+			return err
+		}
+
+		for _, f := range fs {
+			// Skip execution of nil closures.
+			if f == nil {
+				continue
+			}
+
+			if err := f(chanBucket); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	}, func() {}); err != nil {
+		return err
+	}
+
+	// Update the in-memory representation to keep it in sync with the DB.
+	c.IsManuallyDisabled = status
+
+	return nil
+}
+
+// Writes the IsManuallyDisabled status of a channel given an outpoint
+func WriteManuallyDisabled(db *DB, outPoint *wire.OutPoint, status bool) error {
+	return kvdb.Update(db.Backend, func(tx kvdb.RwTx) error {
+		// First fetch the top level bucket which stores all data related to
+		// current, active channels.
+		openChanBucket := tx.ReadBucket(openChannelBucket)
+		if openChanBucket == nil {
+			return ErrNoChanDBExists
+		}
+
+		// Before we delete the channel state, we'll read out the full
+		// details, as we'll also store portions of this information
+		// for record keeping.
+		chanState, err := fetchOpenChannel(
+			openChanBucket, outPoint,
+		)
+
+		err = chanState.putManuallyDisabled(status)
+
+		return err
+	}, func() {})
 }
