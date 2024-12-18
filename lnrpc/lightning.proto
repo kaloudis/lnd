@@ -4025,6 +4025,11 @@ message Invoice {
     global config. This field is only used if is_blinded is true.
     */
     BlindedPathConfig blinded_path_config = 30;
+
+    /*
+    The minimum number of hop hints to include in this invoice.
+    */
+    int32 min_hop_hints = 31;
 }
 
 message BlindedPathConfig {
