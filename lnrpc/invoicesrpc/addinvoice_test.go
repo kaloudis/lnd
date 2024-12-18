@@ -503,7 +503,9 @@ func TestShouldIncludeChannel(t *testing.T) {
 
 var sufficientHintsTestCases = []struct {
 	name          string
+	nCurrentHints int
 	nHintsLeft    int
+	nMinHopHints  int
 	currentAmount lnwire.MilliSatoshi
 	targetAmount  lnwire.MilliSatoshi
 	done          bool
@@ -517,6 +519,23 @@ var sufficientHintsTestCases = []struct {
 	name:       "enough hints",
 	nHintsLeft: 0,
 	done:       true,
+}, {
+	name:          "not enough hints (minimum)",
+	nCurrentHints: 1,
+	nHintsLeft:    0,
+	nMinHopHints:  2,
+	done:          false,
+}, {
+	name:          "enough hints (minimum)",
+	nCurrentHints: 2,
+	nHintsLeft:    0,
+	nMinHopHints:  2,
+	done:          true,
+}, {
+	name:          "current hints",
+	nCurrentHints: 20,
+	nHintsLeft:    0,
+	done:          true,
 }, {
 	name:          "enough bandwidth",
 	nHintsLeft:    1,
@@ -539,7 +558,10 @@ func TestSufficientHints(t *testing.T) {
 			t.Parallel()
 
 			enoughHints := sufficientHints(
-				tc.nHintsLeft, tc.currentAmount,
+				tc.nCurrentHints,
+				tc.nHintsLeft,
+				tc.nMinHopHints,
+				tc.currentAmount,
 				tc.targetAmount,
 			)
 			require.Equal(t, tc.done, enoughHints)

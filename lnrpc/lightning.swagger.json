@@ -5925,6 +5925,11 @@
         "blinded_path_config": {
           "$ref": "#/definitions/lnrpcBlindedPathConfig",
           "description": "Config values to use when creating blinded paths for this invoice. These\ncan be used to override the defaults config values provided in by the\nglobal config. This field is only used if is_blinded is true."
+        },
+        "min_hop_hints": {
+          "type": "integer",
+          "format": "int32",
+          "description": "The minimum number of hop hints to include in this invoice."
         }
       }
     },

@@ -12909,8 +12909,10 @@ type Invoice struct {
 	//can be used to override the defaults config values provided in by the
 	//global config. This field is only used if is_blinded is true.
 	BlindedPathConfig *BlindedPathConfig `protobuf:"bytes,30,opt,name=blinded_path_config,json=blindedPathConfig,proto3" json:"blinded_path_config,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// The minimum number of hop hints to include in this invoice.
+	MinHopHints   int32 `protobuf:"varint,31,opt,name=min_hop_hints,json=minHopHints,proto3" json:"min_hop_hints,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Invoice) Reset() {
@@ -13146,6 +13148,13 @@ func (x *Invoice) GetBlindedPathConfig() *BlindedPathConfig {
 		return x.BlindedPathConfig
 	}
 	return nil
+}
+
+func (x *Invoice) GetMinHopHints() int32 {
+	if x != nil {
+		return x.MinHopHints
+	}
+	return 0
 }
 
 type BlindedPathConfig struct {
@@ -19826,7 +19835,7 @@ const file_lightning_proto_rawDesc = "" +
 	"\fsettle_index\x18\x02 \x01(\x04R\vsettleIndex\x12\x1f\n" +
 	"\vsettle_time\x18\x03 \x01(\x03R\n" +
 	"settleTime\x12\"\n" +
-	"\ramt_paid_msat\x18\x05 \x01(\x03R\vamtPaidMsat\"\xac\n" +
+	"\ramt_paid_msat\x18\x05 \x01(\x03R\vamtPaidMsat\"\xd0\n" +
 	"\n" +
 	"\aInvoice\x12\x12\n" +
 	"\x04memo\x18\x01 \x01(\tR\x04memo\x12\x1d\n" +
@@ -19866,7 +19875,8 @@ const file_lightning_proto_rawDesc = "" +
 	"\x11amp_invoice_state\x18\x1c \x03(\v2#.lnrpc.Invoice.AmpInvoiceStateEntryR\x0fampInvoiceState\x12\x1d\n" +
 	"\n" +
 	"is_blinded\x18\x1d \x01(\bR\tisBlinded\x12H\n" +
-	"\x13blinded_path_config\x18\x1e \x01(\v2\x18.lnrpc.BlindedPathConfigR\x11blindedPathConfig\x1aK\n" +
+	"\x13blinded_path_config\x18\x1e \x01(\v2\x18.lnrpc.BlindedPathConfigR\x11blindedPathConfig\x12\"\n" +
+	"\rmin_hop_hints\x18\x1f \x01(\x05R\vminHopHints\x1aK\n" +
 	"\rFeaturesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\rR\x03key\x12$\n" +
 	"\x05value\x18\x02 \x01(\v2\x0e.lnrpc.FeatureR\x05value:\x028\x01\x1aZ\n" +

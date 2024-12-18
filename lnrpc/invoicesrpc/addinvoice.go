@@ -156,6 +156,10 @@ type AddInvoiceData struct {
 	// RouteHints are optional route hints that can each be individually
 	// used to assist in reaching the invoice's destination.
 	RouteHints [][]zpay32.HopHint
+
+	// The minimum number of routing hints that will be included in an
+	// invoice.
+	MinHopHints int32
 }
 
 // BlindedPathConfig holds the configuration values required for blinded path
@@ -461,7 +465,11 @@ func AddInvoice(ctx context.Context, cfg *AddInvoiceConfig,
 			totalHopHints = maxHopHints
 		}
 
-		hopHintsCfg := newSelectHopHintsCfg(cfg, totalHopHints)
+		hopHintsCfg := newSelectHopHintsCfg(
+			cfg,
+			totalHopHints,
+			int(invoice.MinHopHints),
+		)
 		hopHints, err := PopulateHopHints(
 			hopHintsCfg, amtMSat, invoice.RouteHints,
 		)
@@ -790,10 +798,13 @@ type SelectHopHintsCfg struct {
 
 	// MaxHopHints is the maximum number of hop hints we are interested in.
 	MaxHopHints int
+
+	// MinHopHints is the minimum number of hop hints we are interested in.
+	MinHopHints int
 }
 
 func newSelectHopHintsCfg(invoicesCfg *AddInvoiceConfig,
-	maxHopHints int) *SelectHopHintsCfg {
+	maxHopHints int, minHopHints int) *SelectHopHintsCfg {
 
 	return &SelectHopHintsCfg{
 		FetchAllChannels: invoicesCfg.ChanDB.FetchAllChannels,
@@ -813,11 +824,13 @@ func newSelectHopHintsCfg(invoicesCfg *AddInvoiceConfig,
 		},
 		GetAlias:    invoicesCfg.GetAlias,
 		MaxHopHints: maxHopHints,
+		MinHopHints: minHopHints,
 	}
 }
 
 // sufficientHints checks whether we have sufficient hop hints, based on the
 // any of the following criteria:
+//   - Min hop hints: the minimum of hints to include.
 //   - Hop hint count: the number of hints have reach our max target.
 //   - Total incoming capacity (for non-zero invoice amounts): the sum of the
 //     remote balance amount in the hints is bigger of equal than our target
@@ -825,8 +838,12 @@ func newSelectHopHintsCfg(invoicesCfg *AddInvoiceConfig,
 //
 // We limit our number of hop hints like this to keep our invoice size down,
 // and to avoid leaking all our private channels when we don't need to.
-func sufficientHints(nHintsLeft int, currentAmount,
+func sufficientHints(nCurrentHints, nHintsLeft, nMinHopHints int, currentAmount,
 	targetAmount lnwire.MilliSatoshi) bool {
+
+	if nCurrentHints < nMinHopHints {
+		return false
+	}
 
 	if nHintsLeft <= 0 {
 		log.Debugf("Reached targeted number of hop hints")
@@ -921,16 +938,21 @@ func shouldIncludeChannel(cfg *SelectHopHintsCfg,
 //
 // NOTE: selectHopHints expects potentialHints to be already sorted in
 // descending priority.
-func selectHopHints(cfg *SelectHopHintsCfg, nHintsLeft int,
+func selectHopHints(cfg *SelectHopHintsCfg, nHintsLeft, nMinHopHints int,
 	targetBandwidth lnwire.MilliSatoshi,
 	potentialHints []*channeldb.OpenChannel,
 	alreadyIncluded map[uint64]bool) [][]zpay32.HopHint {
 
 	currentBandwidth := lnwire.MilliSatoshi(0)
 	hopHints := make([][]zpay32.HopHint, 0, nHintsLeft)
+	nCurrentHints := len(hopHints)
 	for _, channel := range potentialHints {
 		enoughHopHints := sufficientHints(
-			nHintsLeft, currentBandwidth, targetBandwidth,
+			nCurrentHints,
+			nHintsLeft,
+			nMinHopHints,
+			currentBandwidth,
+			targetBandwidth,
 		)
 		if enoughHopHints {
 			return hopHints
@@ -988,8 +1010,8 @@ func PopulateHopHints(cfg *SelectHopHintsCfg, amtMSat lnwire.MilliSatoshi,
 
 	targetBandwidth := amtMSat * hopHintFactor
 	selectedHints := selectHopHints(
-		cfg, nHintsLeft, targetBandwidth, potentialHints,
-		alreadyIncluded,
+		cfg, nHintsLeft, cfg.MinHopHints, targetBandwidth,
+		potentialHints, alreadyIncluded,
 	)
 
 	hopHints = append(hopHints, selectedHints...)
