@@ -3,8 +3,8 @@ package electrum
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"sort"
 	"sync"
@@ -14,7 +14,7 @@ import (
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/btcec/v2/schnorr"
 	"github.com/btcsuite/btcd/chaincfg"
-	"github.com/btcsuite/btcutil/hdkeychain"
+	"github.com/btcsuite/btcwallet/hdkeychain"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
@@ -352,9 +352,6 @@ func (w *Wallet) PublishTransaction(tx *wire.MsgTx, label string) error {
 
 	return nil
 }
-func (w *Wallet) SubscribeTransactions() (*lnwallet.TransactionSubscription, error) {
-	return nil, fmt.Errorf("SubscribeTransactions not implemented for electrum wallet")
-}
 func (w *Wallet) IsSynced() (bool, int64, error) {
 	// TODO: Check Electrum server sync status? Or rely on GetBestBlock?
 	// For now, assume synced if connected.
@@ -582,13 +579,6 @@ func (w *Wallet) CreateSimpleTx(outputs []*wire.TxOut, feeRate chainfee.SatPerKW
 
 	// Return the created transaction and the selected inputs.
 	return tx, selectedUtxos, nil
-}
-func (w *Wallet) ListAccounts(name string, acctType lnwallet.AddressType) ([]*lnwallet.Account, error) {
-	return nil, fmt.Errorf("ListAccounts not implemented for electrum wallet")
-}
-func (w *Wallet) RequiredReserve(numOutputs int) btcutil.Amount {
-	// Placeholder: No reserve needed if UTXOs managed externally?
-	return 0
 }
 // NewAddress derives and returns the next external or internal address based
 // on the requested type and account.

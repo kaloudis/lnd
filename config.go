@@ -1339,7 +1339,7 @@ func ValidateConfig(cfg Config, interceptor signal.Interceptor, fileParser,
 		// Nothing to configure, we're running without any chain
 		// backend whatsoever (pure signing mode).
 
-	case chainreg.ElectrumBackendName: // "electrum"
+	case electrumBackendName: // "electrum"
 		// Ensure ServerAddr is set for Electrum mode.
 		if cfg.ElectrumMode.ServerAddr == "" {
 			return nil, mkErr("electrum.server must be set " +

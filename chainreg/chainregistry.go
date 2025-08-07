@@ -21,7 +21,6 @@ import (
 	"github.com/lightningnetwork/lnd/chainntnfs"
 	"github.com/lightningnetwork/lnd/chainntnfs/bitcoindnotify"
 	"github.com/lightningnetwork/lnd/chain/electrum"
-	"github.com/lightningnetwork/lnd/chainntnfs/bitcoindnotify"
 	"github.com/lightningnetwork/lnd/chainntnfs/btcdnotify"
 	"github.com/lightningnetwork/lnd/chainntnfs/neutrinonotify"
 	"github.com/lightningnetwork/lnd/channeldb"
@@ -680,10 +679,10 @@ func NewPartialChainControl(cfg *Config) (*PartialChainControl, func(), error) {
 			}
 		}
 
-	case electrum.BackendName:
+	case "electrum":
 		log.Infof("Initializing electrum backend")
 		electrumSource, err := electrum.New(
-			cfg.ElectrumMode, &cfg.ActiveNetParams,
+			cfg.ElectrumMode, cfg.ActiveNetParams.Params,
 		)
 		if err != nil {
 			return nil, nil, fmt.Errorf("unable to create "+

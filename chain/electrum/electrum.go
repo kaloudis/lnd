@@ -12,12 +12,13 @@ import (
 	"github.com/btcsuite/btcd/btcutil"
 	"crypto/sha256"
 
+	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/checksum0/go-electrum/electrum"
+	"github.com/btcsuite/btcwallet/chain"
 	"github.com/lightningnetwork/lnd/chainntnfs"
-	"github.com/lightningnetwork/lnd/chainreg"
 	"github.com/lightningnetwork/lnd/input"
 	"github.com/lightningnetwork/lnd/keychain"
 	"github.com/lightningnetwork/lnd/routing/chainview"
@@ -35,14 +36,14 @@ var _ input.Signer = (*ElectrumChainSource)(nil)
 var _ lnwallet.WalletController = (*ElectrumChainSource)(nil) // Partially implemented
 var _ lnwallet.BlockChainIO = (*ElectrumChainSource)(nil)     // Partially implemented (via chainio.Interface)
 
-// var _ chain.Interface = (*ElectrumChainSource)(nil) // Partially done
+var _ chain.Interface = (*ElectrumChainSource)(nil)
 var _ chainview.FilteredChainView = (*ElectrumChainSource)(nil) // Partially done
 var _ chainntnfs.MempoolWatcher = (*ElectrumChainSource)(nil)   // Partially done
 // var _ input.Signer = (*ElectrumChainSource)(nil) // Requires key management
 // var _ keychain.SecretKeyRing = (*Wallet)(nil) // Requires key management
 
 // BackendName is the name of this backend.
-const BackendName = chainreg.ElectrumBackendName
+const BackendName = "electrum"
 
 var (
 	// ErrUnimplemented is returned for features that are not yet
@@ -69,7 +70,7 @@ type scriptHashUpdate struct {
 // confirmationClient holds the state for a client subscribing to transaction
 // confirmations.
 type confirmationClient struct {
-	id            uint64
+	id            uint32
 	txid          *chainhash.Hash
 	pkScript      []byte
 	numConfs      uint32
@@ -81,7 +82,7 @@ type confirmationClient struct {
 
 // spendClient holds the state for a client subscribing to outpoint spends.
 type spendClient struct {
-	id         uint64
+	id         uint32
 	outpoint   *wire.OutPoint
 	pkScript   []byte
 	heightHint uint32
@@ -93,8 +94,52 @@ type spendClient struct {
 // server for chain data and notifications.
 type ElectrumChainSource struct {
 	// TODO: Add necessary fields like Electrum client, config, etc.
-	cfg    *lncfg.ElectrumConfig
-	client *electrum.Client
+	cfg       *lncfg.ElectrumConfig
+	netParams *chaincfg.Params
+	client    *electrum.Client
+
+	// bestBlock is the current best block stored.
+	bestBlockMtx sync.RWMutex
+	bestBlock    chainntnfs.BlockEpoch
+
+	// mu is a mutex for key index access.
+	mu sync.Mutex
+
+	// Key management fields
+	// TODO: These will need to be initialized and managed properly.
+	externalKeyIdx uint32
+	internalKeyIdx uint32
+
+	// scriptHashClientMtx is a mutex for managing script hash client maps.
+	scriptHashClientMtx sync.Mutex
+
+	// scriptHashSubscriptions maps an electrum script hash to its current
+	// status string.
+	scriptHashSubscriptions map[string]string
+
+	// scriptHashListeners maps an electrum script hash to the cancel
+	// function for its listener goroutine.
+	scriptHashListeners map[string]context.CancelFunc
+
+	// confClientsByScriptHash maps a script hash to a slice of clients
+	// waiting for confirmation notifications.
+	confClientsByScriptHash map[string][]*confirmationClient
+
+	// spendClientsByScriptHash maps a script hash to a slice of clients
+	// waiting for spend notifications.
+	spendClientsByScriptHash map[string][]*spendClient
+
+	// nextClientID is an atomic counter for generating unique client IDs.
+	nextClientID uint32
+
+	// blockEpochClientMtx is a mutex for managing block epoch clients.
+	blockEpochClientMtx sync.Mutex
+
+	// blockEpochClients is a map of client IDs to block epoch clients.
+	blockEpochClients map[uint64]*blockEpochClient
+
+	// nextBlockEpochClientID is a counter for block epoch client IDs.
+	nextBlockEpochClientID uint64
 
 	// TODO: Add fields for managing subscriptions, fee estimation cache, etc.
 
@@ -104,7 +149,7 @@ type ElectrumChainSource struct {
 
 // New creates a new ElectrumChainSource.
 // TODO: This constructor needs to be filled out.
-func New(cfg *lncfg.ElectrumConfig, netParams *chainreg.BitcoinNetParams) (*ElectrumChainSource, error) {
+func New(cfg *lncfg.ElectrumConfig, netParams *chaincfg.Params) (*ElectrumChainSource, error) {
 	// TODO: Establish connection to Electrum server using cfg.ServerAddr,
 	// cfg.UseTLS, cfg.ConnectTimeout, etc.
 	client := electrum.NewClient()
@@ -128,9 +173,17 @@ func New(cfg *lncfg.ElectrumConfig, netParams *chainreg.BitcoinNetParams) (*Elec
 	// TODO: Perform ServerVersion handshake?
 
 	return &ElectrumChainSource{
-		cfg:    cfg,
-		client: client,
-		quit:   make(chan struct{}),
+		cfg:                       cfg,
+		netParams:                 netParams,
+		client:                    client,
+		quit:                      make(chan struct{}),
+		scriptHashSubscriptions:   make(map[string]string),
+		scriptHashListeners:       make(map[string]context.CancelFunc),
+		confClientsByScriptHash:   make(map[string][]*confirmationClient),
+		spendClientsByScriptHash:  make(map[string][]*spendClient),
+		nextClientID:              1,
+		blockEpochClients:         make(map[uint64]*blockEpochClient),
+		nextBlockEpochClientID:    1,
 	}, nil
 }
 
@@ -188,20 +241,70 @@ func (e *ElectrumChainSource) GetBlockHash(blockHeight int64) (*chainhash.Hash, 
 		return nil, fmt.Errorf("failed to get block header for height %d: %w", height, err)
 	}
 
-	// Assuming headerInfo contains the hex string of the block hash.
-	hash, err := chainhash.NewHashFromStr(headerInfo.Hex)
+	// The hex string is the full block header. We need to decode it and
+	// then calculate the block hash from it.
+	headerBytes, err := hex.DecodeString(headerInfo.Hex)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse block hash %s for height %d: %w",
-			headerInfo.Hex, height, err)
+		return nil, fmt.Errorf("failed to decode block header hex for "+
+			"height %d: %w", height, err)
 	}
 
-	return hash, nil
+	var header wire.BlockHeader
+	if err := header.Deserialize(bytes.NewReader(headerBytes)); err != nil {
+		return nil, fmt.Errorf("failed to deserialize block header for "+
+			"height %d: %w", height, err)
+	}
+
+	// The block hash is the double-SHA256 of the header.
+	hash := header.BlockHash()
+	return &hash, nil
 }
 
 // GetBestBlock implements the chainio.Interface.
-// TODO: Implement using Electrum client (likely via block header subscription).
 func (e *ElectrumChainSource) GetBestBlock() (*chainhash.Hash, int32, error) {
-	return nil, 0, ErrUnimplemented
+	e.bestBlockMtx.RLock()
+	// If we have a cached best block, return it.
+	if e.bestBlock.Height > 0 {
+		hash := e.bestBlock.Hash
+		height := e.bestBlock.Height
+		e.bestBlockMtx.RUnlock()
+		return &hash, height, nil
+	}
+	e.bestBlockMtx.RUnlock()
+
+	// If no block is cached, fetch the current tip from the server. We use
+	// height 0 to get the current tip.
+	ctx, cancel := context.WithTimeout(context.Background(), e.cfg.RequestTimeout)
+	defer cancel()
+	headerInfo, err := e.client.BlockHeader(ctx, 0)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to get best block header: %w", err)
+	}
+
+	// The hex string is the full block header. We need to decode it and
+	// then calculate the block hash from it.
+	headerBytes, err := hex.DecodeString(headerInfo.Hex)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to decode best block header hex: %w", err)
+	}
+
+	var header wire.BlockHeader
+	if err := header.Deserialize(bytes.NewReader(headerBytes)); err != nil {
+		return nil, 0, fmt.Errorf("failed to deserialize best block header: %w", err)
+	}
+
+	hash := header.BlockHash()
+	height := int32(headerInfo.Height)
+
+	// Cache the new best block.
+	e.bestBlockMtx.Lock()
+	e.bestBlock = chainntnfs.BlockEpoch{
+		Hash:   hash,
+		Height: height,
+	}
+	e.bestBlockMtx.Unlock()
+
+	return &hash, height, nil
 }
 
 // GetUtxo implements the chainio.Interface. It fetches the transaction containing
@@ -300,6 +403,30 @@ func (e *ElectrumChainSource) GetTransaction(txid *chainhash.Hash) (*wire.MsgTx,
 	}
 
 	return &msgTx, nil
+}
+
+// SendRawTransaction broadcasts a transaction to the Electrum server.
+func (e *ElectrumChainSource) SendRawTransaction(tx *wire.MsgTx, allowHighFees bool) (*chainhash.Hash, error) {
+	var buf bytes.Buffer
+	if err := tx.Serialize(&buf); err != nil {
+		return nil, err
+	}
+	txHex := hex.EncodeToString(buf.Bytes())
+
+	ctx, cancel := context.WithTimeout(context.Background(), e.cfg.RequestTimeout)
+	defer cancel()
+
+	txidStr, err := e.client.TransactionBroadcast(ctx, txHex)
+	if err != nil {
+		return nil, fmt.Errorf("failed to broadcast tx: %w", err)
+	}
+
+	hash, err := chainhash.NewHashFromStr(txidStr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse txid from broadcast response: %w", err)
+	}
+
+	return hash, nil
 }
 
 // EstimateFeePerKW implements the chainfee.Estimator interface.
@@ -457,7 +584,7 @@ func (e *ElectrumChainSource) RegisterConfirmationsNtfn(txid *chainhash.Hash,
 
 // removeConfirmationClient removes a confirmation client from the internal maps.
 // MUST be called with scriptHashClientMtx held.
-func (e *ElectrumChainSource) removeConfirmationClient(scriptHash string, clientID uint64) {
+func (e *ElectrumChainSource) removeConfirmationClient(scriptHash string, clientID uint32) {
 	clients := e.confClientsByScriptHash[scriptHash]
 	for i, c := range clients {
 		if c.id == clientID {
@@ -590,7 +717,7 @@ func (e *ElectrumChainSource) RegisterSpendNtfn(outpoint *wire.OutPoint, pkScrip
 
 // removeSpendClient removes a spend client from the internal maps.
 // MUST be called with scriptHashClientMtx held.
-func (e *ElectrumChainSource) removeSpendClient(scriptHash string, clientID uint64) {
+func (e *ElectrumChainSource) removeSpendClient(scriptHash string, clientID uint32) {
 	clients := e.spendClientsByScriptHash[scriptHash]
 	for i, c := range clients {
 		if c.id == clientID {
@@ -831,8 +958,8 @@ func (e *ElectrumChainSource) processScriptHistory(scriptHash string,
 	e.bestBlockMtx.RUnlock()
 
 	// Keep track of clients to remove after processing.
-	var confirmedClientsToRemove []uint64
-	var spentClientsToRemove []uint64
+	var confirmedClientsToRemove []uint32
+	var spentClientsToRemove []uint32
 
 	ltndLog.Debugf("Processing history for script hash %s (%d items)",
 		scriptHash, len(history))
@@ -841,7 +968,7 @@ func (e *ElectrumChainSource) processScriptHistory(scriptHash string,
 	ltndLog.Debugf("Checking %d confirmation clients for script hash %s",
 		len(confClients), scriptHash)
 	for _, client := range confClients {
-		clientID := atomic.LoadUint64(&client.event.CancelID) // Use CancelID as the client ID
+		clientID := atomic.LoadUint32(&client.event.CancelID) // Use CancelID as the client ID
 		// Skip if client has cancelled.
 		if clientID == 0 { // Cancel sets ID to 0 in chainntnfs/height_hint_cache.go#L105 (or similar logic)
 			ltndLog.Tracef("Skipping cancelled confirmation client %d for script hash %s",
@@ -905,7 +1032,7 @@ func (e *ElectrumChainSource) processScriptHistory(scriptHash string,
 	ltndLog.Debugf("Checking %d spend clients for script hash %s",
 		len(spendClients), scriptHash)
 	for _, client := range spendClients {
-		clientID := atomic.LoadUint64(&client.event.CancelID) // Use CancelID as the client ID
+		clientID := atomic.LoadUint32(&client.event.CancelID) // Use CancelID as the client ID
 		// Skip if client has cancelled.
 		if clientID == 0 {
 			ltndLog.Tracef("Skipping cancelled spend client %d for script hash %s",
@@ -1043,10 +1170,14 @@ func (e *ElectrumChainSource) subscribeScriptHash(pkScript []byte) (string, erro
 	}
 
 	// Not subscribed yet, call the Electrum client's subscribe method.
-	// ** ASSUMPTION: ScriptHashSubscribe returns (initialStatus, statusChan, error) **
 	ctxSub, cancelSub := context.WithTimeout(context.Background(), e.cfg.RequestTimeout)
 	defer cancelSub()
-	initialStatus, statusChan, err := e.client.ScriptHashSubscribe(ctxSub, electrumScriptHash)
+
+	// The `go-electrum` library sends all notifications to a single
+	// channel on the client. Our `notificationHandler` is responsible for
+	// listening to this channel and dispatching updates. The subscribe
+	// method itself only returns the initial status.
+	initialStatus, err := e.client.ScriptHashSubscribe(ctxSub, electrumScriptHash)
 	if err != nil {
 		return "", fmt.Errorf("failed to subscribe to script hash %s: %w",
 			electrumScriptHash, err)
@@ -1057,6 +1188,9 @@ func (e *ElectrumChainSource) subscribeScriptHash(pkScript []byte) (string, erro
 
 	ltndLog.Infof("Subscribed to script hash %s, initial status: %s",
 		electrumScriptHash, initialStatus)
+
+	// Note: No per-script-hash channel is returned. The main
+	// notificationHandler is expected to handle updates.
 
 	return initialStatus, nil
 }
