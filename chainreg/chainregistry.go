@@ -20,6 +20,8 @@ import (
 	"github.com/lightningnetwork/lnd/blockcache"
 	"github.com/lightningnetwork/lnd/chainntnfs"
 	"github.com/lightningnetwork/lnd/chainntnfs/bitcoindnotify"
+	"github.com/lightningnetwork/lnd/chain/electrum"
+	"github.com/lightningnetwork/lnd/chainntnfs/bitcoindnotify"
 	"github.com/lightningnetwork/lnd/chainntnfs/btcdnotify"
 	"github.com/lightningnetwork/lnd/chainntnfs/neutrinonotify"
 	"github.com/lightningnetwork/lnd/channeldb"
@@ -676,6 +678,51 @@ func NewPartialChainControl(cfg *Config) (*PartialChainControl, func(), error) {
 			if err != nil {
 				return nil, nil, err
 			}
+		}
+
+	case electrum.BackendName:
+		log.Infof("Initializing electrum backend")
+		electrumSource, err := electrum.New(
+			cfg.ElectrumMode, &cfg.ActiveNetParams,
+		)
+		if err != nil {
+			return nil, nil, fmt.Errorf("unable to create "+
+				"electrum chain source: %w", err)
+		}
+
+		// Assign the interfaces. Note that ElectrumChainSource needs
+		// to fully implement these for this to compile and run
+		// correctly. Placeholders are used where implementation is
+		// pending.
+		cc.ChainNotifier = electrumSource
+		cc.FeeEstimator = electrumSource
+
+		// TODO: ElectrumChainSource needs to implement chain.Interface
+		cc.ChainSource = electrumSource
+
+		// TODO: ElectrumChainSource needs to implement chainview.FilteredChainView
+		cc.ChainView = electrumSource
+
+		// TODO: ElectrumChainSource needs to implement chainntnfs.MempoolWatcher
+		cc.MempoolNotifier = electrumSource
+
+		// Use GetBestBlock as a basic health check for now.
+		cc.HealthCheck = func() error {
+			_, _, err := electrumSource.GetBestBlock()
+			return err
+		}
+
+		// Add Electrum source stop function to cleanup tasks.
+		stopElectrum := func() {
+			if err := electrumSource.Stop(); err != nil {
+				log.Errorf("Error stopping electrum "+
+					"source: %v", err)
+			}
+		}
+		existingCleanup := ccCleanup
+		ccCleanup = func() {
+			existingCleanup()
+			stopElectrum()
 		}
 
 	case "nochainbackend":

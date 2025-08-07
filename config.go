@@ -249,6 +249,7 @@ const (
 	bitcoindBackendName = "bitcoind"
 	btcdBackendName     = "btcd"
 	neutrinoBackendName = "neutrino"
+	electrumBackendName = "electrum" // Use chainreg constant ideally
 
 	defaultPrunedNodeMaxPeers = 4
 	defaultNeutrinoMaxPeers   = 8
@@ -376,9 +377,10 @@ type Config struct {
 	FeeURL string `long:"feeurl" description:"DEPRECATED: Use 'fee.url' option. Optional URL for external fee estimation. If no URL is specified, the method for fee estimation will depend on the chosen backend and network. Must be set for neutrino on mainnet." hidden:"true"`
 
 	Bitcoin      *lncfg.Chain    `group:"Bitcoin" namespace:"bitcoin"`
-	BtcdMode     *lncfg.Btcd     `group:"btcd" namespace:"btcd"`
-	BitcoindMode *lncfg.Bitcoind `group:"bitcoind" namespace:"bitcoind"`
-	NeutrinoMode *lncfg.Neutrino `group:"neutrino" namespace:"neutrino"`
+	BtcdMode     *lncfg.Btcd         `group:"btcd" namespace:"btcd"`
+	BitcoindMode *lncfg.Bitcoind     `group:"bitcoind" namespace:"bitcoind"`
+	NeutrinoMode *lncfg.Neutrino     `group:"neutrino" namespace:"neutrino"`
+	ElectrumMode *lncfg.ElectrumConfig `group:"electrum" namespace:"electrum"`
 
 	BlockCacheSize uint64 `long:"blockcachesize" description:"The maximum capacity of the block cache"`
 
@@ -612,6 +614,7 @@ func DefaultConfig() Config {
 			UserAgentVersion: neutrino.UserAgentVersion,
 			MaxPeers:         defaultNeutrinoMaxPeers,
 		},
+		ElectrumMode: &lncfg.ElectrumConfig{}, // Add default Electrum config initialization if needed
 		BlockCacheSize:     defaultBlockCacheSize,
 		MaxPendingChannels: lncfg.DefaultMaxPendingChannels,
 		NoSeedBackup:       defaultNoSeedBackup,
@@ -1336,8 +1339,16 @@ func ValidateConfig(cfg Config, interceptor signal.Interceptor, fileParser,
 		// Nothing to configure, we're running without any chain
 		// backend whatsoever (pure signing mode).
 
+	case chainreg.ElectrumBackendName: // "electrum"
+		// Ensure ServerAddr is set for Electrum mode.
+		if cfg.ElectrumMode.ServerAddr == "" {
+			return nil, mkErr("electrum.server must be set " +
+				"when using electrum node")
+		}
+		// TODO: Add more Electrum-specific validation if needed.
+
 	default:
-		str := "only btcd, bitcoind, and neutrino mode " +
+		str := "only btcd, bitcoind, neutrino, and electrum mode " +
 			"supported for bitcoin at this time"
 
 		return nil, mkErr(str)

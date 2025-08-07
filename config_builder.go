@@ -672,6 +672,34 @@ func (d *DefaultWalletImpl) BuildWalletConfig(ctx context.Context,
 			"strategy %v", d.cfg.CoinSelectionStrategy)
 	}
 
+	// If using Electrum backend, initialize its wallet with the master key.
+	if d.cfg.Bitcoin.Node == chainreg.ElectrumBackendName {
+		electrumSource, ok := partialChainControl.ChainSource.(*chainreg.ElectrumChainSource)
+		if !ok {
+			return nil, nil, nil, fmt.Errorf("ChainSource is not ElectrumChainSource for electrum node")
+		}
+
+		// Derive the master HD private key from the unlocked wallet.
+		// NOTE: This assumes walletInitParams.Wallet is the *btcwallet* instance,
+		// even if we don't use its controller methods directly for Electrum.
+		// This might need adjustment if a different key source is used.
+		if walletInitParams.Wallet == nil {
+			return nil, nil, nil, fmt.Errorf("unlocked wallet instance is nil, cannot derive master key")
+		}
+		masterPrivKey, err := walletInitParams.Wallet.Manager.MasterHDKey(
+			walletInitParams.Password, // Use the unlock password
+		)
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("failed to get master private key: %w", err)
+		}
+
+		// Initialize the Electrum wallet with the derived key.
+		err = electrumSource.Wallet().InitUnencrypted(masterPrivKey)
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("failed to initialize electrum wallet: %w", err)
+		}
+	}
+
 	earlyExit = false
 	return partialChainControl, walletConfig, cleanUp, nil
 }
@@ -764,11 +792,11 @@ func (d *DefaultWalletImpl) BuildChainControl(
 	lnWalletConfig := lnwallet.Config{
 		Database:              partialChainControl.Cfg.ChanStateDB,
 		Notifier:              partialChainControl.ChainNotifier,
-		WalletController:      walletController,
-		Signer:                walletController,
+		WalletController:      walletController, // Use the appropriate WalletController
+		Signer:                signer,           // Use the appropriate Signer
 		FeeEstimator:          partialChainControl.FeeEstimator,
-		SecretKeyRing:         keyRing,
-		ChainIO:               walletController,
+		SecretKeyRing:         keyRing, // Use the appropriate SecretKeyRing
+		ChainIO:               chainIO, // Use the appropriate BlockChainIO
 		NetParams:             *walletConfig.NetParams,
 		CoinSelectionStrategy: walletConfig.CoinSelectionStrategy,
 		AuxLeafStore:          partialChainControl.Cfg.AuxLeafStore,
@@ -1356,19 +1384,21 @@ func waitForWalletPassword(cfg *Config,
 			err = importWatchOnlyAccounts(newWallet, initMsg)
 
 		default:
-			// The unlocker service made sure either the cipher seed
-			// or the extended key is set so, we shouldn't get here.
-			// The default case is just here for readability and
-			// completeness.
-			err = fmt.Errorf("cannot create wallet, neither seed " +
-				"nor extended key was given")
+			// The unlocker service made sure either the cipher seed,
+			// the extended key or watch-only accounts are set so, we
+			// shouldn't get here. The default case is just here for
+			// readability and completeness.
+			err = fmt.Errorf("cannot create wallet, neither seed, " +
+				"extended key nor watch-only accounts were given")
 		}
 		if err != nil {
 			// Don't leave the file open in case the new wallet
 			// could not be created for whatever reason.
-			if err := loader.UnloadWallet(); err != nil {
-				ltndLog.Errorf("Could not unload new "+
-					"wallet: %v", err)
+			if loader != nil { // Check if loader was initialized
+				if errUnload := loader.UnloadWallet(); errUnload != nil {
+					ltndLog.Errorf("Could not unload new "+
+						"wallet: %v", errUnload)
+				}
 			}
 			return nil, err
 		}

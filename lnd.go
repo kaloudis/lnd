@@ -17,6 +17,7 @@ import (
 	runtimePprof "runtime/pprof"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/btcsuite/btcd/btcutil"
