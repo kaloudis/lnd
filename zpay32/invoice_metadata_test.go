@@ -13,7 +13,7 @@ func TestEncodeDecodeInvoiceMetadata(t *testing.T) {
 
 	tests := []struct {
 		name  string
-		flags uint8
+		flags byte
 	}{
 		{
 			name:  "no flags",
@@ -33,29 +33,22 @@ func TestEncodeDecodeInvoiceMetadata(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			encoded, err := EncodeInvoiceMetadata(tc.flags)
-			require.NoError(t, err)
-			require.NotEmpty(t, encoded)
+			encoded := EncodeInvoiceMetadata(tc.flags)
+			require.Len(t, encoded, 1)
 
-			decoded, err := DecodeInvoiceMetadata(encoded)
-			require.NoError(t, err)
+			decoded := DecodeInvoiceMetadata(encoded)
 			require.Equal(t, tc.flags, decoded)
 		})
 	}
 }
 
 // TestDecodeEmptyMetadata tests that decoding empty or nil metadata returns
-// zero flags without error.
+// zero flags.
 func TestDecodeEmptyMetadata(t *testing.T) {
 	t.Parallel()
 
-	flags, err := DecodeInvoiceMetadata(nil)
-	require.NoError(t, err)
-	require.Equal(t, uint8(0), flags)
-
-	flags, err = DecodeInvoiceMetadata([]byte{})
-	require.NoError(t, err)
-	require.Equal(t, uint8(0), flags)
+	require.Equal(t, byte(0), DecodeInvoiceMetadata(nil))
+	require.Equal(t, byte(0), DecodeInvoiceMetadata([]byte{}))
 }
 
 // TestIsHodlInvoiceMetadata tests the convenience function for checking the
@@ -68,19 +61,17 @@ func TestIsHodlInvoiceMetadata(t *testing.T) {
 	require.False(t, IsHodlInvoiceMetadata([]byte{}))
 
 	// Metadata with hodl flag set.
-	hodlMeta, err := EncodeInvoiceMetadata(MetadataFlagHodlInvoice)
-	require.NoError(t, err)
-	require.True(t, IsHodlInvoiceMetadata(hodlMeta))
+	require.True(t, IsHodlInvoiceMetadata(
+		EncodeInvoiceMetadata(MetadataFlagHodlInvoice),
+	))
 
 	// Metadata with only other flags (not hodl).
-	otherMeta, err := EncodeInvoiceMetadata(1 << 5)
-	require.NoError(t, err)
-	require.False(t, IsHodlInvoiceMetadata(otherMeta))
+	require.False(t, IsHodlInvoiceMetadata(
+		EncodeInvoiceMetadata(1<<5),
+	))
 
 	// Metadata with hodl flag and other flags.
-	combinedMeta, err := EncodeInvoiceMetadata(
-		MetadataFlagHodlInvoice | (1 << 5),
-	)
-	require.NoError(t, err)
-	require.True(t, IsHodlInvoiceMetadata(combinedMeta))
+	require.True(t, IsHodlInvoiceMetadata(
+		EncodeInvoiceMetadata(MetadataFlagHodlInvoice|(1<<5)),
+	))
 }

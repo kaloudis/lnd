@@ -1,90 +1,32 @@
 package zpay32
 
-import (
-	"bytes"
-	"fmt"
-	"io"
-
-	"github.com/lightningnetwork/lnd/tlv"
-)
-
 const (
-	// MetadataFeatureFlagsType is the TLV type used to encode feature
-	// flags in the invoice metadata. This allows signaling various
-	// properties about the invoice, such as whether it is a hodl invoice.
-	MetadataFeatureFlagsType tlv.Type = 0
-
-	// MetadataFlagHodlInvoice is a bit flag within the metadata feature
-	// flags that signals the invoice is a hodl invoice. When set, it
+	// MetadataFlagHodlInvoice is a bit flag within the invoice metadata
+	// byte that signals the invoice is a hodl invoice. When set, it
 	// indicates that the receiver does not intend to settle the payment
 	// immediately, and it may take some time to resolve.
-	MetadataFlagHodlInvoice uint8 = 1 << 0
+	MetadataFlagHodlInvoice byte = 1 << 0
 )
 
-// EncodeInvoiceMetadata encodes invoice metadata flags into a TLV-encoded byte
-// slice. The flags parameter is a bitmap where each bit represents a specific
+// EncodeInvoiceMetadata encodes invoice metadata flags into a single byte.
+// The flags parameter is a bitmap where each bit represents a specific
 // property of the invoice.
-func EncodeInvoiceMetadata(flags uint8) ([]byte, error) {
-	flagsVal := flags
-
-	featureFlagsRecord := tlv.MakePrimitiveRecord(
-		MetadataFeatureFlagsType, &flagsVal,
-	)
-
-	stream, err := tlv.NewStream(featureFlagsRecord)
-	if err != nil {
-		return nil, fmt.Errorf("unable to create metadata stream: %w",
-			err)
-	}
-
-	var buf bytes.Buffer
-	if err := stream.Encode(&buf); err != nil {
-		return nil, fmt.Errorf("unable to encode metadata: %w", err)
-	}
-
-	return buf.Bytes(), nil
+func EncodeInvoiceMetadata(flags byte) []byte {
+	return []byte{flags}
 }
 
-// DecodeInvoiceMetadata decodes a TLV-encoded invoice metadata byte slice and
-// returns the feature flags bitmap. If the metadata is empty or does not
-// contain the feature flags TLV type, a zero value is returned.
-func DecodeInvoiceMetadata(metadata []byte) (uint8, error) {
+// DecodeInvoiceMetadata returns the flags byte from the invoice metadata.
+// If the metadata is empty, a zero value is returned.
+func DecodeInvoiceMetadata(metadata []byte) byte {
 	if len(metadata) == 0 {
-		return 0, nil
+		return 0
 	}
 
-	var flags uint8
-	featureFlagsRecord := tlv.MakePrimitiveRecord(
-		MetadataFeatureFlagsType, &flags,
-	)
-
-	stream, err := tlv.NewStream(featureFlagsRecord)
-	if err != nil {
-		return 0, fmt.Errorf("unable to create metadata stream: %w",
-			err)
-	}
-
-	r := bytes.NewReader(metadata)
-	parsedTypes, err := stream.DecodeWithParsedTypes(r)
-	if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
-		return 0, fmt.Errorf("unable to decode metadata: %w", err)
-	}
-
-	// Check that the feature flags type was actually parsed.
-	if _, ok := parsedTypes[MetadataFeatureFlagsType]; !ok {
-		return 0, nil
-	}
-
-	return flags, nil
+	return metadata[0]
 }
 
-// IsHodlInvoiceMetadata returns true if the given TLV-encoded invoice metadata
-// contains the hodl invoice flag.
+// IsHodlInvoiceMetadata returns true if the given invoice metadata contains
+// the hodl invoice flag.
 func IsHodlInvoiceMetadata(metadata []byte) bool {
-	flags, err := DecodeInvoiceMetadata(metadata)
-	if err != nil {
-		return false
-	}
-
-	return flags&MetadataFlagHodlInvoice != 0
+	return DecodeInvoiceMetadata(metadata)&MetadataFlagHodlInvoice != 0
 }
