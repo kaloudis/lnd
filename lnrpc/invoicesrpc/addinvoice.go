@@ -493,11 +493,15 @@ func AddInvoice(ctx context.Context, cfg *AddInvoiceConfig,
 	// invoice is a hodl invoice by decoding the metadata and warn the
 	// user that settlement may not happen immediately.
 	if invoice.HodlInvoice {
-		options = append(options, zpay32.Metadata(
-			zpay32.EncodeInvoiceMetadata(
-				zpay32.MetadataFlagHodlInvoice,
-			),
-		))
+		metadata, err := zpay32.EncodeInvoiceMetadata(
+			zpay32.MetadataFlagHodlInvoice,
+		)
+		if err != nil {
+			return nil, nil, fmt.Errorf("unable to encode hodl "+
+				"invoice metadata: %w", err)
+		}
+
+		options = append(options, zpay32.Metadata(metadata))
 	}
 
 	options = append(options, zpay32.Features(invoiceFeatures))

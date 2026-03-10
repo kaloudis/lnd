@@ -13,7 +13,7 @@ func TestEncodeDecodeInvoiceMetadata(t *testing.T) {
 
 	tests := []struct {
 		name  string
-		flags byte
+		flags uint8
 	}{
 		{
 			name:  "no flags",
@@ -33,22 +33,29 @@ func TestEncodeDecodeInvoiceMetadata(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			encoded := EncodeInvoiceMetadata(tc.flags)
-			require.Len(t, encoded, 1)
+			encoded, err := EncodeInvoiceMetadata(tc.flags)
+			require.NoError(t, err)
+			require.Len(t, encoded, 3)
 
-			decoded := DecodeInvoiceMetadata(encoded)
+			decoded, err := DecodeInvoiceMetadata(encoded)
+			require.NoError(t, err)
 			require.Equal(t, tc.flags, decoded)
 		})
 	}
 }
 
 // TestDecodeEmptyMetadata tests that decoding empty or nil metadata returns
-// zero flags.
+// zero flags without error.
 func TestDecodeEmptyMetadata(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, byte(0), DecodeInvoiceMetadata(nil))
-	require.Equal(t, byte(0), DecodeInvoiceMetadata([]byte{}))
+	flags, err := DecodeInvoiceMetadata(nil)
+	require.NoError(t, err)
+	require.Equal(t, uint8(0), flags)
+
+	flags, err = DecodeInvoiceMetadata([]byte{})
+	require.NoError(t, err)
+	require.Equal(t, uint8(0), flags)
 }
 
 // TestIsHodlInvoiceMetadata tests the convenience function for checking the
@@ -61,17 +68,30 @@ func TestIsHodlInvoiceMetadata(t *testing.T) {
 	require.False(t, IsHodlInvoiceMetadata([]byte{}))
 
 	// Metadata with hodl flag set.
-	require.True(t, IsHodlInvoiceMetadata(
-		EncodeInvoiceMetadata(MetadataFlagHodlInvoice),
-	))
+	hodlMeta, err := EncodeInvoiceMetadata(MetadataFlagHodlInvoice)
+	require.NoError(t, err)
+	require.True(t, IsHodlInvoiceMetadata(hodlMeta))
 
 	// Metadata with only other flags (not hodl).
-	require.False(t, IsHodlInvoiceMetadata(
-		EncodeInvoiceMetadata(1<<5),
-	))
+	otherMeta, err := EncodeInvoiceMetadata(1 << 5)
+	require.NoError(t, err)
+	require.False(t, IsHodlInvoiceMetadata(otherMeta))
 
 	// Metadata with hodl flag and other flags.
-	require.True(t, IsHodlInvoiceMetadata(
-		EncodeInvoiceMetadata(MetadataFlagHodlInvoice|(1<<5)),
-	))
+	combinedMeta, err := EncodeInvoiceMetadata(
+		MetadataFlagHodlInvoice | (1 << 5),
+	)
+	require.NoError(t, err)
+	require.True(t, IsHodlInvoiceMetadata(combinedMeta))
+}
+
+// TestDecodeNonTLVMetadata tests that non-TLV metadata is handled gracefully
+// and does not trigger false positives for the hodl flag.
+func TestDecodeNonTLVMetadata(t *testing.T) {
+	t.Parallel()
+
+	// Arbitrary metadata that wasn't TLV-encoded should not be detected
+	// as a hodl invoice.
+	require.False(t, IsHodlInvoiceMetadata([]byte{0xff, 0xab, 0xcd}))
+	require.False(t, IsHodlInvoiceMetadata([]byte("hello")))
 }
