@@ -80,7 +80,8 @@ func DecodeInvoiceMetadata(metadata []byte) (uint8, error) {
 }
 
 // IsHodlInvoiceMetadata returns true if the given TLV-encoded invoice metadata
-// contains the hodl invoice flag.
+// contains the hodl invoice flag. Callers should only invoke this after
+// verifying that the tlv_invoice_metadata feature bit is set on the invoice.
 func IsHodlInvoiceMetadata(metadata []byte) bool {
 	flags, err := DecodeInvoiceMetadata(metadata)
 	if err != nil {

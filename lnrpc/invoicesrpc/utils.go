@@ -196,7 +196,7 @@ func CreateRPCInvoice(invoice *invoices.Invoice,
 		PaymentAddr: invoice.Terms.PaymentAddr[:],
 		IsAmp:       invoice.IsAMP(),
 		IsBlinded:   invoice.IsBlinded(),
-		IsHodl:      invoice.HodlInvoice || zpay32.IsHodlInvoiceMetadata(decoded.Metadata),
+		IsHodl:      invoice.HodlInvoice || (decoded.Features != nil && decoded.Features.HasFeature(lnwire.TLVInvoiceMetadataOptional) && zpay32.IsHodlInvoiceMetadata(decoded.Metadata)),
 	}
 
 	rpcInvoice.AmpInvoiceState = make(map[string]*lnrpc.AMPInvoiceState)

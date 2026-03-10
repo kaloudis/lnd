@@ -18,6 +18,7 @@ import (
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/lightningnetwork/lnd/channeldb"
+	"github.com/lightningnetwork/lnd/feature"
 	"github.com/lightningnetwork/lnd/graph/db/models"
 	"github.com/lightningnetwork/lnd/invoices"
 	"github.com/lightningnetwork/lnd/lntypes"
@@ -489,9 +490,10 @@ func AddInvoice(ctx context.Context, cfg *AddInvoiceConfig,
 	}
 
 	// If this is a hodl invoice, encode the hodl flag in the invoice
-	// metadata using TLV encoding. This allows wallets to detect the
-	// invoice is a hodl invoice by decoding the metadata and warn the
-	// user that settlement may not happen immediately.
+	// metadata using TLV encoding (bLIP-67). We set the
+	// tlv_invoice_metadata feature bit to signal that the metadata field
+	// is TLV-encoded, and encode the hodl flag in the metadata's feature
+	// flags TLV record.
 	if invoice.HodlInvoice {
 		metadata, err := zpay32.EncodeInvoiceMetadata(
 			zpay32.MetadataFlagHodlInvoice,
@@ -502,6 +504,11 @@ func AddInvoice(ctx context.Context, cfg *AddInvoiceConfig,
 		}
 
 		options = append(options, zpay32.Metadata(metadata))
+
+		invoiceFeatures = feature.SetBit(
+			invoiceFeatures,
+			lnwire.TLVInvoiceMetadataOptional,
+		)
 	}
 
 	options = append(options, zpay32.Features(invoiceFeatures))
