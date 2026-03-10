@@ -487,6 +487,24 @@ func AddInvoice(ctx context.Context, cfg *AddInvoiceConfig,
 	} else {
 		invoiceFeatures = cfg.GenInvoiceFeatures()
 	}
+
+	// If this is a hodl invoice, encode the hodl flag in the invoice
+	// metadata using TLV encoding and set the corresponding feature bit
+	// to signal that the metadata uses TLV encoding.
+	if invoice.HodlInvoice {
+		metadata, err := zpay32.EncodeInvoiceMetadata(
+			zpay32.MetadataFlagHodlInvoice,
+		)
+		if err != nil {
+			return nil, nil, fmt.Errorf("unable to encode hodl "+
+				"invoice metadata: %w", err)
+		}
+
+		options = append(options, zpay32.Metadata(metadata))
+
+		invoiceFeatures.Set(lnwire.TLVMetadataEncOptional)
+	}
+
 	options = append(options, zpay32.Features(invoiceFeatures))
 
 	// Generate and set a random payment address for this payment. If the

@@ -4139,6 +4139,14 @@ message Invoice {
     global config. This field is only used if is_blinded is true.
     */
     BlindedPathConfig blinded_path_config = 30;
+
+    /*
+    Signals that this invoice is a hodl invoice, meaning settlement may not
+    happen immediately upon payment. This is determined by decoding the
+    TLV-encoded metadata in the invoice's payment request.
+    Note: Output only, don't specify for creating an invoice.
+    */
+    bool is_hodl = 31;
 }
 
 message BlindedPathConfig {

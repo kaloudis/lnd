@@ -309,6 +309,16 @@ const (
 	// a BOLT 11 invoice.
 	Bolt11BlindedPathsOptional = 263
 
+	// TLVMetadataEncRequired is a required feature bit that signals the
+	// invoice's metadata field uses TLV encoding. This allows the
+	// metadata to carry structured data, such as feature flags indicating
+	// the invoice is a hodl invoice.
+	TLVMetadataEncRequired FeatureBit = 264
+
+	// TLVMetadataEncOptional is an optional feature bit that signals the
+	// invoice's metadata field uses TLV encoding.
+	TLVMetadataEncOptional FeatureBit = 265
+
 	// SimpleTaprootOverlayChansRequired is a required bit that indicates
 	// support for the special custom taproot overlay channel.
 	SimpleTaprootOverlayChansOptional = 2025
@@ -399,6 +409,8 @@ var Features = map[FeatureBit]string{
 	ExperimentalAccountabilityOptional:   "accountable-x",
 	Bolt11BlindedPathsOptional:           "bolt-11-blinded-paths",
 	Bolt11BlindedPathsRequired:           "bolt-11-blinded-paths",
+	TLVMetadataEncOptional:               "tlv-metadata-enc",
+	TLVMetadataEncRequired:               "tlv-metadata-enc",
 	RbfCoopCloseOptional:                 "rbf-coop-close",
 	RbfCoopCloseRequired:                 "rbf-coop-close",
 	RbfCoopCloseOptionalStaging:          "rbf-coop-close-x",

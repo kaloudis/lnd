@@ -13307,6 +13307,9 @@ type Invoice struct {
 	// can be used to override the defaults config values provided in by the
 	// global config. This field is only used if is_blinded is true.
 	BlindedPathConfig *BlindedPathConfig `protobuf:"bytes,30,opt,name=blinded_path_config,json=blindedPathConfig,proto3" json:"blinded_path_config,omitempty"`
+	// Signals that this invoice is a hodl invoice, meaning settlement may not
+	// happen immediately upon payment.
+	IsHodl bool `protobuf:"varint,31,opt,name=is_hodl,json=isHodl,proto3" json:"is_hodl,omitempty"`
 }
 
 func (x *Invoice) Reset() {
@@ -13544,6 +13547,13 @@ func (x *Invoice) GetBlindedPathConfig() *BlindedPathConfig {
 		return x.BlindedPathConfig
 	}
 	return nil
+}
+
+func (x *Invoice) GetIsHodl() bool {
+	if x != nil {
+		return x.IsHodl
+	}
+	return false
 }
 
 type BlindedPathConfig struct {
