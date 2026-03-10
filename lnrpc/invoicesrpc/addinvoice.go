@@ -489,8 +489,9 @@ func AddInvoice(ctx context.Context, cfg *AddInvoiceConfig,
 	}
 
 	// If this is a hodl invoice, encode the hodl flag in the invoice
-	// metadata using TLV encoding and set the corresponding feature bit
-	// to signal that the metadata uses TLV encoding.
+	// metadata using TLV encoding. This allows wallets to detect the
+	// invoice is a hodl invoice by decoding the metadata and warn the
+	// user that settlement may not happen immediately.
 	if invoice.HodlInvoice {
 		metadata, err := zpay32.EncodeInvoiceMetadata(
 			zpay32.MetadataFlagHodlInvoice,
@@ -501,8 +502,6 @@ func AddInvoice(ctx context.Context, cfg *AddInvoiceConfig,
 		}
 
 		options = append(options, zpay32.Metadata(metadata))
-
-		invoiceFeatures.Set(lnwire.TLVMetadataEncOptional)
 	}
 
 	options = append(options, zpay32.Features(invoiceFeatures))

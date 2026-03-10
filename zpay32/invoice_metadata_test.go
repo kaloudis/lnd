@@ -13,7 +13,7 @@ func TestEncodeDecodeInvoiceMetadata(t *testing.T) {
 
 	tests := []struct {
 		name  string
-		flags uint64
+		flags uint8
 	}{
 		{
 			name:  "no flags",
@@ -51,11 +51,11 @@ func TestDecodeEmptyMetadata(t *testing.T) {
 
 	flags, err := DecodeInvoiceMetadata(nil)
 	require.NoError(t, err)
-	require.Equal(t, uint64(0), flags)
+	require.Equal(t, uint8(0), flags)
 
 	flags, err = DecodeInvoiceMetadata([]byte{})
 	require.NoError(t, err)
-	require.Equal(t, uint64(0), flags)
+	require.Equal(t, uint8(0), flags)
 }
 
 // TestIsHodlInvoiceMetadata tests the convenience function for checking the

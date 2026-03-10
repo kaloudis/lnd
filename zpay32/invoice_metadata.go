@@ -18,13 +18,13 @@ const (
 	// flags that signals the invoice is a hodl invoice. When set, it
 	// indicates that the receiver does not intend to settle the payment
 	// immediately, and it may take some time to resolve.
-	MetadataFlagHodlInvoice uint64 = 1 << 0
+	MetadataFlagHodlInvoice uint8 = 1 << 0
 )
 
 // EncodeInvoiceMetadata encodes invoice metadata flags into a TLV-encoded byte
 // slice. The flags parameter is a bitmap where each bit represents a specific
 // property of the invoice.
-func EncodeInvoiceMetadata(flags uint64) ([]byte, error) {
+func EncodeInvoiceMetadata(flags uint8) ([]byte, error) {
 	flagsVal := flags
 
 	featureFlagsRecord := tlv.MakePrimitiveRecord(
@@ -48,12 +48,12 @@ func EncodeInvoiceMetadata(flags uint64) ([]byte, error) {
 // DecodeInvoiceMetadata decodes a TLV-encoded invoice metadata byte slice and
 // returns the feature flags bitmap. If the metadata is empty or does not
 // contain the feature flags TLV type, a zero value is returned.
-func DecodeInvoiceMetadata(metadata []byte) (uint64, error) {
+func DecodeInvoiceMetadata(metadata []byte) (uint8, error) {
 	if len(metadata) == 0 {
 		return 0, nil
 	}
 
-	var flags uint64
+	var flags uint8
 	featureFlagsRecord := tlv.MakePrimitiveRecord(
 		MetadataFeatureFlagsType, &flags,
 	)
