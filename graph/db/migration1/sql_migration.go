@@ -22,6 +22,15 @@ import (
 	"golang.org/x/time/rate"
 )
 
+// MigrateGraphToSQLOpts holds optional configuration for MigrateGraphToSQL.
+type MigrateGraphToSQLOpts struct {
+	// SkipSourceNode skips migrating the source node from the KV
+	// backend. This is useful when migrating from an EGS bolt file
+	// where the source node belongs to the EGS server, not the local
+	// wallet.
+	SkipSourceNode bool
+}
+
 // MigrateGraphToSQL migrates the graph store from a KV backend to a SQL
 // backend.
 //
@@ -29,7 +38,13 @@ import (
 // only for now and will be called from the main lnd binary once the
 // migration is fully implemented and tested.
 func MigrateGraphToSQL(ctx context.Context, cfg *SQLStoreConfig,
-	kvBackend kvdb.Backend, sqlDB SQLQueries) error {
+	kvBackend kvdb.Backend, sqlDB SQLQueries,
+	optFns ...func(*MigrateGraphToSQLOpts)) error {
+
+	opts := &MigrateGraphToSQLOpts{}
+	for _, fn := range optFns {
+		fn(opts)
+	}
 
 	log.Infof("Starting migration of the graph store from KV to SQL")
 	t0 := time.Now()
@@ -50,9 +65,14 @@ func MigrateGraphToSQL(ctx context.Context, cfg *SQLStoreConfig,
 		return fmt.Errorf("could not migrate nodes: %w", err)
 	}
 
-	// 2) Migrate the source node.
-	if err := migrateSourceNode(ctx, kvBackend, sqlDB); err != nil {
-		return fmt.Errorf("could not migrate source node: %w", err)
+	// 2) Migrate the source node. Skip if skipSourceNode is set
+	// (e.g. when called from the speedloader where the EGS bolt
+	// file has a different source node than the local wallet).
+	if !opts.SkipSourceNode {
+		if err := migrateSourceNode(ctx, kvBackend, sqlDB); err != nil {
+			return fmt.Errorf("could not migrate source node: %w",
+				err)
+		}
 	}
 
 	// 3) Migrate all the channels and channel policies.
@@ -62,22 +82,25 @@ func MigrateGraphToSQL(ctx context.Context, cfg *SQLStoreConfig,
 			err)
 	}
 
-	// 4) Migrate the Prune log.
+	// 4) Migrate the Prune log. Skip if the graph-meta bucket does
+	// not exist (e.g. when migrating from an EGS-only bolt file).
 	err = migratePruneLog(ctx, cfg.QueryCfg, kvBackend, sqlDB)
-	if err != nil {
+	if err != nil && !errors.Is(err, ErrGraphNotFound) {
 		return fmt.Errorf("could not migrate prune log: %w", err)
 	}
 
-	// 5) Migrate the closed SCID index.
+	// 5) Migrate the closed SCID index. Skip if not present.
 	err = migrateClosedSCIDIndex(ctx, cfg.QueryCfg, kvBackend, sqlDB)
-	if err != nil {
+	if err != nil && !errors.Is(err, ErrGraphNotFound) {
 		return fmt.Errorf("could not migrate closed SCID index: %w",
 			err)
 	}
 
-	// 6) Migrate the zombie index.
+	// 6) Migrate the zombie index. Skip if not present.
 	err = migrateZombieIndex(ctx, cfg.QueryCfg, kvBackend, sqlDB)
-	if err != nil {
+	if err != nil && !errors.Is(err, ErrGraphNotFound) &&
+		!errors.Is(err, ErrGraphNoEdgesFound) {
+
 		return fmt.Errorf("could not migrate zombie index: %w", err)
 	}
 
