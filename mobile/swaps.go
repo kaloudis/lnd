@@ -10,7 +10,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/BoltzExchange/boltz-client/boltz"
+	"github.com/BoltzExchange/boltz-client/v2/pkg/boltz"
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/decred/dcrd/dcrec/secp256k1/v4"
@@ -51,11 +51,14 @@ func CreateClaimTransaction(endpoint string, id string, claimLeaf string, refund
 		return fmt.Errorf("Error parsing service public key %s", err)
 	}
 
-	if err := swapTree.Init(false, false, keys, servicePubKeyFormatted); err != nil {
+	if err := swapTree.Init(boltz.CurrencyBtc, false, keys, servicePubKeyFormatted); err != nil {
 		return fmt.Errorf("Error initializing swap tree %s", err)
 	}
 
 	session, err := boltz.NewSigningSession(swapTree)
+	if err != nil {
+		return fmt.Errorf("could not create signing session: %s", err)
+	}
 	partial, err := session.Sign([]byte(transactionHash), []byte(pubNonce))
 	if err != nil {
 		return fmt.Errorf("could not create partial signature: %s", err)
@@ -69,7 +72,7 @@ func CreateClaimTransaction(endpoint string, id string, claimLeaf string, refund
 	return nil
 }
 
-func CreateReverseClaimTransaction(endpoint string, id string, claimLeaf string, refundLeaf string, privateKey string, servicePubKey string, preimageHex string, transactionHex string, lockupAddress string, destinationAddress string, feeRate int32, isTestnet bool) error {
+func CreateReverseClaimTransaction(endpoint string, id string, claimLeaf string, refundLeaf string, privateKey string, servicePubKey string, preimageHex string, transactionHex string, lockupAddress string, destinationAddress string, feeRate int32, minerFee int32, isTestnet bool) error {
 	var toCurrency = boltz.CurrencyBtc
 	var network *boltz.Network
 	if isTestnet {
@@ -106,7 +109,7 @@ func CreateReverseClaimTransaction(endpoint string, id string, claimLeaf string,
 		RefundLeaf: leaf(refundLeaf),
 	}
 
-	if err := swapTree.Init(false, false, keys, servicePubKeyFormatted); err != nil {
+	if err := swapTree.Init(boltz.CurrencyBtc, false, keys, servicePubKeyFormatted); err != nil {
 		return fmt.Errorf("Error initializing swap tree %s", err)
 	}
 
@@ -125,7 +128,14 @@ func CreateReverseClaimTransaction(endpoint string, id string, claimLeaf string,
 		return fmt.Errorf("Error decoding preimage hex string: %w", err)
 	}
 
-	satPerVbyte := float64(feeRate)
+	var fee boltz.Fee
+	if minerFee > 0 {
+		sats := uint64(minerFee)
+		fee = boltz.Fee{Sats: &sats}
+	} else {
+		satPerVbyte := float64(feeRate)
+		fee = boltz.Fee{SatsPerVbyte: &satPerVbyte}
+	}
 	claimTransaction, _, err := boltz.ConstructTransaction(
 		network,
 		boltz.CurrencyBtc,
@@ -142,7 +152,7 @@ func CreateReverseClaimTransaction(endpoint string, id string, claimLeaf string,
 				Cooperative:       true,
 			},
 		},
-		satPerVbyte,
+		fee,
 		boltzApi,
 	)
 	if err != nil {
@@ -232,7 +242,7 @@ func CreateRefundTransaction(endpoint string, id string, claimLeaf string, refun
 	}
 	fmt.Println("SwapTree created successfully")
 
-	if err := swapTree.Init(false, false, keys, servicePubKeyFormatted); err != nil {
+	if err := swapTree.Init(boltz.CurrencyBtc, false, keys, servicePubKeyFormatted); err != nil {
 		return "", fmt.Errorf("error initializing swap tree %s", err)
 	}
 
@@ -266,7 +276,7 @@ func CreateRefundTransaction(endpoint string, id string, claimLeaf string, refun
 				Cooperative:        cooperative,
 			},
 		},
-		satPerVbyte,
+		boltz.Fee{SatsPerVbyte: &satPerVbyte},
 		boltzApi,
 	)
 
