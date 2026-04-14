@@ -92,8 +92,9 @@ type db struct {
 	lock sync.RWMutex
 }
 
-// Enforce db implements the walletdb.DB interface.
+// Enforce db implements the walletdb.DB and walletdb.BatchDB interfaces.
 var _ walletdb.DB = (*db)(nil)
+var _ walletdb.BatchDB = (*db)(nil)
 
 var (
 	// dbConns is a global set of database connections.
@@ -227,6 +228,13 @@ func (db *db) Update(f func(tx walletdb.ReadWriteTx) error,
 	reset func()) error {
 
 	return db.executeTransaction(f, reset, false)
+}
+
+// Batch is identical to Update and only exists to satisfy the walletdb.BatchDB
+// interface. For SQL backends there is no performance gain from batching
+// separate calls, so we simply delegate to Update.
+func (db *db) Batch(f func(tx walletdb.ReadWriteTx) error) error {
+	return db.Update(f, func() {})
 }
 
 // executeTransaction creates a new read-only or read-write transaction and
