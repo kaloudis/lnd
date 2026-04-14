@@ -19,8 +19,8 @@ import (
 
 	"github.com/andybalholm/brotli"
 	"github.com/breez/breez/refcount"
-	"github.com/btcsuite/btcwallet/walletdb/bdb"
 	"github.com/btcsuite/btcd/chaincfg"
+	"github.com/btcsuite/btcwallet/walletdb/bdb"
 	"github.com/gabstv/go-bsdiff/pkg/bspatch"
 	"github.com/lightningnetwork/lnd/channeldb"
 	graphdb "github.com/lightningnetwork/lnd/graph/db"
