@@ -48,9 +48,9 @@ endif
 # If specific package is being unit tested, construct the full name of the
 # subpackage.
 ifneq ($(pkg),)
-UNITPKG := $(PKG)/$(pkg)
+UNITPKG := ./$(pkg)
 UNIT_TARGETED = yes
-COVER_PKG = $(PKG)/$(pkg)
+COVER_PKG = ./$(pkg)
 endif
 
 # If a specific unit test case is being target, construct test.run filter.
