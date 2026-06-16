@@ -937,7 +937,7 @@ func (b *BtcWallet) CreateAccount(keyScope waddrmgr.KeyScope,
 // This is a part of the WalletController interface.
 func (b *BtcWallet) ImportAccount(name string, accountPubKey *hdkeychain.ExtendedKey,
 	masterKeyFingerprint uint32, addrType *waddrmgr.AddressType,
-	dryRun bool) (*waddrmgr.AccountProperties, []btcutil.Address,
+	bs *waddrmgr.BlockStamp, dryRun bool) (*waddrmgr.AccountProperties, []btcutil.Address,
 	[]btcutil.Address, error) {
 
 	// This shares the account namespace with CreateAccount and does the
@@ -965,6 +965,7 @@ func (b *BtcWallet) ImportAccount(name string, accountPubKey *hdkeychain.Extende
 	if !dryRun {
 		accountProps, err := b.wallet.ImportAccount(
 			name, accountPubKey, masterKeyFingerprint, addrType,
+			bs,
 		)
 		if err != nil {
 			return nil, nil, nil, err
@@ -1004,9 +1005,9 @@ func (b *BtcWallet) ImportAccount(name string, accountPubKey *hdkeychain.Extende
 //
 // This is a part of the WalletController interface.
 func (b *BtcWallet) ImportPublicKey(pubKey *btcec.PublicKey,
-	addrType waddrmgr.AddressType) error {
+	addrType waddrmgr.AddressType, bs *waddrmgr.BlockStamp, rescan bool) error {
 
-	return b.wallet.ImportPublicKey(pubKey, addrType)
+	return b.wallet.ImportPublicKey(pubKey, addrType, bs, rescan)
 }
 
 // ImportTaprootScript imports a user-provided taproot script into the address
@@ -2077,6 +2078,18 @@ func (b *BtcWallet) FetchTx(txHash chainhash.Hash) (*wire.MsgTx, error) {
 // transactions.
 func (b *BtcWallet) RemoveDescendants(tx *wire.MsgTx) error {
 	return b.wallet.RemoveDescendants(tx)
+}
+
+func (b *BtcWallet) Rescan(block *waddrmgr.BlockStamp) error {
+	job := &base.RescanJob{
+		Addrs:      nil,
+		OutPoints:  nil,
+		BlockStamp: *block,
+	}
+
+	err := <-b.wallet.SubmitRescan(job)
+
+	return err
 }
 
 // CheckMempoolAcceptance is a wrapper around `TestMempoolAccept` which checks

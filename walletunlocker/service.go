@@ -657,6 +657,8 @@ func (u *UnlockerService) LoadAndUnlock(password []byte,
 	// force a full chain rescan for wallet addresses. Dropping the state
 	// only properly takes effect after opening the wallet. That's why we
 	// start, drop, stop and start again.
+	fmt.Printf("resetting wallet transactions: %v\n", u.
+		resetWalletTransactions)
 	if u.resetWalletTransactions {
 		dropErr := wallet.DropTransactionHistory(
 			unlockedWallet.Database(), true,

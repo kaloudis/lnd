@@ -1757,6 +1757,10 @@
         "dry_run": {
           "type": "boolean",
           "description": "Whether a dry run should be attempted when importing the account. This\nserves as a way to confirm whether the account is being imported correctly\nby returning the first N addresses for the external and internal branches of\nthe account. If these addresses match as expected, then it should be safe to\nimport the account as is."
+        },
+        "birthday_height": {
+          "type": "integer",
+          "format": "int64"
         }
       }
     },
@@ -1794,6 +1798,13 @@
         "address_type": {
           "$ref": "#/definitions/walletrpcAddressType",
           "description": "The type of address that will be generated from the public key."
+        },
+        "rescan": {
+          "type": "boolean"
+        },
+        "birthday_height": {
+          "type": "integer",
+          "format": "int32"
         }
       }
     },
@@ -2164,6 +2175,14 @@
           "type": "string",
           "format": "int64",
           "description": "The amount of reserve required."
+        }
+      }
+    },
+    "walletrpcRescanResponse": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string"
         }
       }
     },

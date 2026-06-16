@@ -443,6 +443,8 @@ service WalletKit {
     unlock/release any locked UTXOs in case of an error in this method.
     */
     rpc FinalizePsbt (FinalizePsbtRequest) returns (FinalizePsbtResponse);
+
+    rpc Rescan (RescanRequest) returns (RescanResponse);
 }
 
 message ListUnspentRequest {
@@ -809,6 +811,7 @@ message ImportAccountRequest {
     import the account as is.
     */
     bool dry_run = 5;
+    uint32 birthday_height = 6;
 }
 message ImportAccountResponse {
     // The details of the imported account.
@@ -829,12 +832,24 @@ message ImportAccountResponse {
     repeated string dry_run_internal_addrs = 3;
 }
 
+message RescanRequest {
+    int32 start_height = 1;
+}
+
+message RescanResponse {
+    string status = 1;
+}
+
 message ImportPublicKeyRequest {
     // A compressed public key represented as raw bytes.
     bytes public_key = 1;
 
     // The type of address that will be generated from the public key.
     AddressType address_type = 2;
+
+    bool rescan = 3;
+
+    int32 birthday_height = 4;
 }
 message ImportPublicKeyResponse {
     // The status of the import operation.
