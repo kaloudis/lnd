@@ -175,6 +175,8 @@ linters:
         - github.com/breez/breez
         - github.com/btcsuite/btcwallet/walletdb
         - github.com/btcsuite/btcwallet
+        - github.com/lightninglabs/chantools
+        - github.com/lightninglabs/lightning-terminal
       replace-local: true
 
     gosec:

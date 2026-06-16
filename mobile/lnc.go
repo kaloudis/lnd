@@ -137,10 +137,10 @@ func InitLNC(nameSpace, debugLevel string) error {
 			return err
 		}
 
-		logWriter := build.NewRotatingLogWriter()
-		SetupLoggers(logWriter, shutdownInterceptor)
+		subLogMgr := build.NewSubLoggerManager()
+		SetupLoggers(subLogMgr, shutdownInterceptor)
 
-		err = build.ParseAndSetDebugLevels(debugLevel, logWriter)
+		err = build.ParseAndSetDebugLevels(debugLevel, subLogMgr)
 		if err != nil {
 			return err
 		}
