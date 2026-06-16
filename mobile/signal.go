@@ -3,6 +3,9 @@
 // Heavily inspired by https://github.com/btcsuite/btcd/blob/master/signal.go
 // Copyright (C) 2015-2022 The Lightning Network Developers
 
+//go:build mobile
+// +build mobile
+
 package lndmobile
 
 import (

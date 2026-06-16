@@ -25,9 +25,12 @@ import (
 	"github.com/lightningnetwork/lnd/channeldb"
 	graphdb "github.com/lightningnetwork/lnd/graph/db"
 	graphmig "github.com/lightningnetwork/lnd/graph/db/migration1"
+	migsqlc "github.com/lightningnetwork/lnd/graph/db/migration1/sqlc"
 	"github.com/lightningnetwork/lnd/graph/db/models"
 	"github.com/lightningnetwork/lnd/kvdb"
 	"github.com/lightningnetwork/lnd/lncfg"
+	"github.com/lightningnetwork/lnd/lnwire"
+	"github.com/lightningnetwork/lnd/routing/route"
 	"github.com/lightningnetwork/lnd/sqldb"
 	"go.etcd.io/bbolt"
 )
@@ -251,7 +254,8 @@ type walkFunc func(keys [][]byte, k, v []byte, seq uint64) error
 type skipFunc func(keys [][]byte, k, v []byte) bool
 
 func ourNode(ctx context.Context, graphDB *graphdb.ChannelGraph) (*models.Node, error) {
-	node, err := graphDB.SourceNode(ctx)
+	vg := graphdb.NewVersionedGraph(graphDB, lnwire.GossipVersion1)
+	node, err := vg.SourceNode(ctx)
 	if err == graphdb.ErrSourceNodeNotSet || err == graphdb.ErrGraphNotFound {
 		return nil, nil
 	}
@@ -271,7 +275,9 @@ func ourData(ctx context.Context, graphDB *graphdb.ChannelGraph, ourNode *models
 		log.Println("Cancelling ourData")
 		return nodes, edges, policies, globalCtx.Err()
 	default:
-		err := graphDB.ForEachNodeChannel(ctx, ourNode.PubKeyBytes, func(
+		err := graphDB.ForEachNodeChannel(
+			ctx, lnwire.GossipVersion1,
+			route.Vertex(ourNode.PubKeyBytes), func(
 			channelEdgeInfo *models.ChannelEdgeInfo,
 			toPolicy *models.ChannelEdgePolicy,
 			fromPolicy *models.ChannelEdgePolicy) error {
@@ -834,7 +840,7 @@ func GossipSync(serviceUrl string, cacheDir string, dataDir string, networkType 
 			}
 			defer tx.Rollback()
 
-			queries := baseDB.WithTx(tx)
+			queries := migsqlc.New(tx)
 			err = graphmig.MigrateGraphToSQL(
 				globalCtx, migCfg, sourceBackend, queries,
 				func(o *graphmig.MigrateGraphToSQLOpts) {

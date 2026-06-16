@@ -243,6 +243,12 @@ replace github.com/btcsuite/btcwallet/walletdb => github.com/djkazic/btcwallet/w
 // New rescan functionality
 replace github.com/btcsuite/btcwallet => github.com/ZeusLN/btcwallet v0.16.18-zeus2
 
+// Mobile sweepremoteclosed: chantools fork with non-library subpkgs stripped.
+replace github.com/lightninglabs/chantools => github.com/ZeusLN/chantools v0.14.2-zeus
+
+// Mobile LNC perms: lit-terminal fork with zero-value mock Configs.
+replace github.com/lightninglabs/lightning-terminal => github.com/ZeusLN/lightning-terminal v0.10.5-alpha-zeus
+
 // If you change this please also update docs/INSTALL.md and all other go.mod
 // files. The release build toolchain version is tracked separately by
 // GO_VERSION in Makefile.

@@ -1374,6 +1374,10 @@ github.com/Yawning/aez v0.0.0-20211027044916-e49e68abd344 h1:cDVUiFo+npB0ZASqnw4
 github.com/Yawning/aez v0.0.0-20211027044916-e49e68abd344/go.mod h1:9pIqrY6SXNL8vjRQE5Hd/OL5GyK/9MrGUWs87z/eFfk=
 github.com/ZeusLN/btcwallet v0.16.18-zeus2 h1:B/bYul4KsqaNSZPjPVcXuyiky1cWc6jX647UD+0w3Gk=
 github.com/ZeusLN/btcwallet v0.16.18-zeus2/go.mod h1:4TTru0cgIPbCZpY4aRfAVwX87zrQw4GXM8MH6+A5xZw=
+github.com/ZeusLN/chantools v0.14.2-zeus h1:tCZeYbQmV8dgX/xZ4vEmO90cMFFq3+4GTDrgxsMiwNM=
+github.com/ZeusLN/chantools v0.14.2-zeus/go.mod h1:jmz0T0XEvSU6MrI/iz5eOlJPtaiwU2jCar5GAKX2y0s=
+github.com/ZeusLN/lightning-terminal v0.10.5-alpha-zeus h1:RI6YB5e1oZmvI/KtDJbPmzvEzYVslrJoZTUiZNgtCAE=
+github.com/ZeusLN/lightning-terminal v0.10.5-alpha-zeus/go.mod h1:/SD85N6V6CrIIN1j0jf0ebpsRfwgcE6bAB3X8CTB+gM=
 github.com/aead/chacha20 v0.0.0-20180709150244-8b13a72661da h1:KjTM2ks9d14ZYCvmHS9iAKVt9AyzRSqNU1qabPih5BY=
 github.com/aead/chacha20 v0.0.0-20180709150244-8b13a72661da/go.mod h1:eHEWzANqSiWQsof+nXEI9bUVUyV6F53Fp89EuCh2EAA=
 github.com/aead/siphash v1.0.1 h1:FwHfE/T45KPKYuuSAKyyvE+oPWcaQ+CUmFW0bPlM+kg=
