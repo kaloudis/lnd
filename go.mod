@@ -224,6 +224,17 @@ require (
 	github.com/tyler-smith/go-bip39 v1.1.0 // indirect
 )
 
+// Block the monolithic versions of these modules so MVS resolves submodule
+// paths (e.g. lightning-node-connect/mailbox, loop/looprpc) to the
+// submodule-as-module variants. lit-terminal v0.10.5-alpha pulls in the
+// older monolithic versions, which gomobile bind's strict tidy refuses
+// to resolve alongside the v1.0.0 submodule modules.
+exclude (
+	github.com/lightninglabs/lightning-node-connect v0.1.12-alpha
+	github.com/lightninglabs/loop v0.26.2-beta
+	github.com/lightninglabs/pool v0.6.4-beta
+)
+
 // This replace is for https://github.com/advisories/GHSA-25xm-hr59-7c27
 replace github.com/ulikunitz/xz => github.com/ulikunitz/xz v0.5.11
 
