@@ -32,7 +32,6 @@ require (
 	github.com/jessevdk/go-flags v1.6.1
 	github.com/jrick/logrotate v1.1.2
 	github.com/kkdai/bstream v1.0.0
-	github.com/lightninglabs/lightning-node-connect v0.3.1-alpha
 	github.com/lightninglabs/lightning-terminal v0.10.5-alpha
 	github.com/lightninglabs/neutrino v0.17.1
 	github.com/lightninglabs/neutrino/cache v1.1.3
@@ -180,7 +179,7 @@ require (
 	go.etcd.io/etcd/raft/v3 v3.5.12 // indirect
 	go.etcd.io/etcd/server/v3 v3.5.12 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
-	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.46.0 // indirect
+	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.46.1 // indirect
 	go.opentelemetry.io/otel v1.44.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.20.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.20.0 // indirect
@@ -211,7 +210,12 @@ require (
 	sigs.k8s.io/yaml v1.2.0 // indirect
 )
 
-require github.com/moby/docker-image-spec v1.3.1 // indirect
+require github.com/lightninglabs/lightning-node-connect/mailbox v1.0.0
+
+require (
+	github.com/lightninglabs/lightning-node-connect/gbn v1.0.0 // indirect
+	github.com/moby/docker-image-spec v1.3.1 // indirect
+)
 
 // This replace is for https://github.com/advisories/GHSA-25xm-hr59-7c27
 replace github.com/ulikunitz/xz => github.com/ulikunitz/xz v0.5.11
