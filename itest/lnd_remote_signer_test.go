@@ -121,6 +121,9 @@ type remoteSignerTestCase struct {
 	sendCoins  bool
 	commitType lnrpc.CommitmentType
 	fn         func(tt *lntest.HarnessTest, wo, carol *node.HarnessNode)
+
+	// watchOnlyArgs are extra arguments for the watch-only node.
+	watchOnlyArgs []string
 }
 
 // prepareRemoteSignerTest prepares a test case for the remote signer test
@@ -183,7 +186,7 @@ func prepareRemoteSignerTest(ht *lntest.HarnessTest, tc remoteSignerTestCase) (
 				"--remotesigner.macaroonpath=%s",
 				signer.Cfg.AdminMacPath,
 			),
-		}, commitArgs...),
+		}, append(commitArgs, tc.watchOnlyArgs...)...),
 		password, &lnrpc.WatchOnly{
 			MasterKeyBirthdayTimestamp: 0,
 			MasterKeyFingerprint:       nil,
@@ -226,6 +229,10 @@ func testRemoteSignerRadomSeed(ht *lntest.HarnessTest) {
 func testRemoteSignerAccountImport(ht *lntest.HarnessTest) {
 	tc := remoteSignerTestCase{
 		name: "account import",
+		// The scenario expects the watch-only node to find coins sent
+		// before the import only after a restart, which rescans from
+		// the birthday once its transaction history is dropped.
+		watchOnlyArgs: []string{"--reset-wallet-transactions"},
 		fn: func(tt *lntest.HarnessTest, wo, carol *node.HarnessNode) {
 			runWalletImportAccountScenario(
 				tt, walletrpc.AddressType_WITNESS_PUBKEY_HASH,

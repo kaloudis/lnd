@@ -368,6 +368,10 @@ type WalletKitClient interface {
 	//caller's responsibility to either publish the transaction on success or
 	//unlock/release any locked UTXOs in case of an error in this method.
 	FinalizePsbt(ctx context.Context, in *FinalizePsbtRequest, opts ...grpc.CallOption) (*FinalizePsbtResponse, error)
+	//
+	//Rescan rescans the chain from the given block height for transactions
+	//that involve the wallet's addresses, including imported ones.
+	Rescan(ctx context.Context, in *RescanRequest, opts ...grpc.CallOption) (*RescanResponse, error)
 }
 
 type walletKitClient struct {
@@ -642,6 +646,15 @@ func (c *walletKitClient) SignPsbt(ctx context.Context, in *SignPsbtRequest, opt
 func (c *walletKitClient) FinalizePsbt(ctx context.Context, in *FinalizePsbtRequest, opts ...grpc.CallOption) (*FinalizePsbtResponse, error) {
 	out := new(FinalizePsbtResponse)
 	err := c.cc.Invoke(ctx, "/walletrpc.WalletKit/FinalizePsbt", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *walletKitClient) Rescan(ctx context.Context, in *RescanRequest, opts ...grpc.CallOption) (*RescanResponse, error) {
+	out := new(RescanResponse)
+	err := c.cc.Invoke(ctx, "/walletrpc.WalletKit/Rescan", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1000,6 +1013,10 @@ type WalletKitServer interface {
 	//caller's responsibility to either publish the transaction on success or
 	//unlock/release any locked UTXOs in case of an error in this method.
 	FinalizePsbt(context.Context, *FinalizePsbtRequest) (*FinalizePsbtResponse, error)
+	//
+	//Rescan rescans the chain from the given block height for transactions
+	//that involve the wallet's addresses, including imported ones.
+	Rescan(context.Context, *RescanRequest) (*RescanResponse, error)
 	mustEmbedUnimplementedWalletKitServer()
 }
 
@@ -1096,6 +1113,9 @@ func (UnimplementedWalletKitServer) SignPsbt(context.Context, *SignPsbtRequest) 
 }
 func (UnimplementedWalletKitServer) FinalizePsbt(context.Context, *FinalizePsbtRequest) (*FinalizePsbtResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method FinalizePsbt not implemented")
+}
+func (UnimplementedWalletKitServer) Rescan(context.Context, *RescanRequest) (*RescanResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Rescan not implemented")
 }
 func (UnimplementedWalletKitServer) mustEmbedUnimplementedWalletKitServer() {}
 
@@ -1650,6 +1670,24 @@ func _WalletKit_FinalizePsbt_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
+func _WalletKit_Rescan_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RescanRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WalletKitServer).Rescan(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/walletrpc.WalletKit/Rescan",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WalletKitServer).Rescan(ctx, req.(*RescanRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // WalletKit_ServiceDesc is the grpc.ServiceDesc for WalletKit service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1776,6 +1814,10 @@ var WalletKit_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "FinalizePsbt",
 			Handler:    _WalletKit_FinalizePsbt_Handler,
+		},
+		{
+			MethodName: "Rescan",
+			Handler:    _WalletKit_Rescan_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

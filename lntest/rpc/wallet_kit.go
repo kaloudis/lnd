@@ -31,6 +31,18 @@ func (h *HarnessRPC) ListUnspent(
 	return resp
 }
 
+func (h *HarnessRPC) Rescan(
+	req *walletrpc.RescanRequest) *walletrpc.RescanResponse {
+
+	ctxt, cancel := context.WithTimeout(h.runCtx, DefaultTimeout)
+	defer cancel()
+
+	resp, err := h.WalletKit.Rescan(ctxt, req)
+	h.NoError(err, "Rescan")
+
+	return resp
+}
+
 // DeriveKey makes a RPC call to the DeriveKey and asserts.
 func (h *HarnessRPC) DeriveKey(kl *signrpc.KeyLocator) *signrpc.KeyDescriptor {
 	ctxt, cancel := context.WithTimeout(h.runCtx, DefaultTimeout)

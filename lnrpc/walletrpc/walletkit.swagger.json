@@ -606,6 +606,39 @@
         ]
       }
     },
+    "/v2/wallet/rescan": {
+      "post": {
+        "summary": "Rescan rescans the chain from the given block height for transactions\nthat involve the wallet's addresses, including imported ones.",
+        "operationId": "WalletKit_Rescan",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/walletrpcRescanResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/walletrpcRescanRequest"
+            }
+          }
+        ],
+        "tags": [
+          "WalletKit"
+        ]
+      }
+    },
     "/v2/wallet/reserve": {
       "get": {
         "summary": "lncli: `wallet requiredreserve`\nRequiredReserve returns the minimum amount of satoshis that should be kept\nin the wallet in order to fee bump anchor channels if necessary. The value\nscales with the number of public anchor channels but is capped at a maximum.",
@@ -1757,6 +1790,10 @@
         "dry_run": {
           "type": "boolean",
           "description": "Whether a dry run should be attempted when importing the account. This\nserves as a way to confirm whether the account is being imported correctly\nby returning the first N addresses for the external and internal branches of\nthe account. If these addresses match as expected, then it should be safe to\nimport the account as is."
+        },
+        "birthday_height": {
+          "type": "integer",
+          "format": "int64"
         }
       }
     },
@@ -1794,6 +1831,13 @@
         "address_type": {
           "$ref": "#/definitions/walletrpcAddressType",
           "description": "The type of address that will be generated from the public key."
+        },
+        "rescan": {
+          "type": "boolean"
+        },
+        "birthday_height": {
+          "type": "integer",
+          "format": "int32"
         }
       }
     },
@@ -2164,6 +2208,25 @@
           "type": "string",
           "format": "int64",
           "description": "The amount of reserve required."
+        }
+      }
+    },
+    "walletrpcRescanRequest": {
+      "type": "object",
+      "properties": {
+        "start_height": {
+          "type": "integer",
+          "format": "int32",
+          "description": "The block height to start the rescan from."
+        }
+      }
+    },
+    "walletrpcRescanResponse": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "description": "Set to \"ok\" if the rescan was started without error."
         }
       }
     },

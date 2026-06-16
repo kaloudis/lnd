@@ -131,7 +131,8 @@ func (w *WalletController) CreateAccount(waddrmgr.KeyScope,
 
 // ImportAccount currently returns a dummy value.
 func (w *WalletController) ImportAccount(string, *hdkeychain.ExtendedKey,
-	uint32, *waddrmgr.AddressType, bool) (*waddrmgr.AccountProperties,
+	uint32, *waddrmgr.AddressType, *waddrmgr.BlockStamp,
+	bool) (*waddrmgr.AccountProperties,
 	[]btcutil.Address, []btcutil.Address, error) {
 
 	return nil, nil, nil, nil
@@ -139,7 +140,7 @@ func (w *WalletController) ImportAccount(string, *hdkeychain.ExtendedKey,
 
 // ImportPublicKey currently returns a dummy value.
 func (w *WalletController) ImportPublicKey(*btcec.PublicKey,
-	waddrmgr.AddressType) error {
+	waddrmgr.AddressType, *waddrmgr.BlockStamp, bool) error {
 
 	return nil
 }
@@ -149,6 +150,10 @@ func (w *WalletController) ImportTaprootScript(waddrmgr.KeyScope,
 	*waddrmgr.Tapscript) (waddrmgr.ManagedAddress, error) {
 
 	return nil, nil
+}
+
+func (w *WalletController) Rescan(block *waddrmgr.BlockStamp) error {
+	return nil
 }
 
 // SendOutputs currently returns dummy values.
