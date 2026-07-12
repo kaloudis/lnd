@@ -17,10 +17,10 @@ import (
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/lightninglabs/lightning-node-connect/mailbox"
 	"github.com/lightninglabs/lightning-terminal/litclient"
-	"github.com/lightninglabs/lightning-terminal/perms"
 	"github.com/lightningnetwork/lnd/build"
 	"github.com/lightningnetwork/lnd/keychain"
 	"github.com/lightningnetwork/lnd/lnrpc"
+	"github.com/lightningnetwork/lnd/lnrpc/chainrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
 	"gopkg.in/macaroon-bakery.v2/bakery"
@@ -33,7 +33,7 @@ var (
 	// time.
 	initMu sync.Mutex
 
-	permsMgr *perms.Manager
+	permsMgr *PermissionsManager
 
 	jsonCBRegex = regexp.MustCompile(`(\w+)\.(\w+)\.(\w+)`)
 
@@ -104,7 +104,7 @@ func initGlobals() error {
 	}
 
 	var err error
-	permsMgr, err = perms.NewManager(true)
+	permsMgr, err = NewPermissionsManager()
 
 	return err
 }
@@ -148,6 +148,11 @@ func InitLNC(nameSpace, debugLevel string) error {
 		for _, registration := range litclient.Registrations {
 			registration(registry)
 		}
+
+		// litclient.Registrations does not cover the WalletUnlocker
+		// or ChainKit services, so register their callbacks directly.
+		lnrpc.RegisterWalletUnlockerJSONCallbacks(registry)
+		chainrpc.RegisterChainKitJSONCallbacks(registry)
 
 		interceptorLogsInitialize = true
 	}
