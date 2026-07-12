@@ -70,6 +70,7 @@ func local_request_State_GetState_0(ctx context.Context, marshaler runtime.Marsh
 // UnaryRPC     :call StateServer directly.
 // StreamingRPC :currently unsupported pending https://github.com/grpc/grpc-go/issues/906.
 // Note that using this registration option will cause many gRPC library features to stop working. Consider using RegisterStateHandlerFromEndpoint instead.
+// GRPC interceptors will not work for this type of registration. To use interceptors, you must use the "runtime.WithMiddlewares" option in the "runtime.NewServeMux" call.
 func RegisterStateHandlerServer(ctx context.Context, mux *runtime.ServeMux, server StateServer) error {
 
 	mux.Handle("GET", pattern_State_SubscribeState_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
@@ -110,21 +111,21 @@ func RegisterStateHandlerServer(ctx context.Context, mux *runtime.ServeMux, serv
 // RegisterStateHandlerFromEndpoint is same as RegisterStateHandler but
 // automatically dials to "endpoint" and closes the connection when "ctx" gets done.
 func RegisterStateHandlerFromEndpoint(ctx context.Context, mux *runtime.ServeMux, endpoint string, opts []grpc.DialOption) (err error) {
-	conn, err := grpc.DialContext(ctx, endpoint, opts...)
+	conn, err := grpc.NewClient(endpoint, opts...)
 	if err != nil {
 		return err
 	}
 	defer func() {
 		if err != nil {
 			if cerr := conn.Close(); cerr != nil {
-				grpclog.Infof("Failed to close conn to %s: %v", endpoint, cerr)
+				grpclog.Errorf("Failed to close conn to %s: %v", endpoint, cerr)
 			}
 			return
 		}
 		go func() {
 			<-ctx.Done()
 			if cerr := conn.Close(); cerr != nil {
-				grpclog.Infof("Failed to close conn to %s: %v", endpoint, cerr)
+				grpclog.Errorf("Failed to close conn to %s: %v", endpoint, cerr)
 			}
 		}()
 	}()
@@ -142,7 +143,7 @@ func RegisterStateHandler(ctx context.Context, mux *runtime.ServeMux, conn *grpc
 // to "mux". The handlers forward requests to the grpc endpoint over the given implementation of "StateClient".
 // Note: the gRPC framework executes interceptors within the gRPC handler. If the passed in "StateClient"
 // doesn't go through the normal gRPC flow (creating a gRPC client etc.) then it will be up to the passed in
-// "StateClient" to call the correct interceptors.
+// "StateClient" to call the correct interceptors. This client ignores the HTTP middlewares.
 func RegisterStateHandlerClient(ctx context.Context, mux *runtime.ServeMux, client StateClient) error {
 
 	mux.Handle("GET", pattern_State_SubscribeState_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
