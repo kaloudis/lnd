@@ -252,7 +252,7 @@ replace github.com/breez/breez => github.com/djkazic/breez v0.0.8
 replace github.com/btcsuite/btcwallet/walletdb => github.com/djkazic/btcwallet/walletdb v1.7.4
 
 // New rescan functionality
-replace github.com/btcsuite/btcwallet => github.com/ZeusLN/btcwallet v0.16.18-zeus2
+replace github.com/btcsuite/btcwallet => github.com/ZeusLN/btcwallet v0.16.19-7-zeus
 
 // Mobile sweepremoteclosed: chantools fork with non-library subpkgs stripped.
 replace github.com/lightninglabs/chantools => github.com/ZeusLN/chantools v0.14.2-zeus

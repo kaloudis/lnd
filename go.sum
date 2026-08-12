@@ -1372,8 +1372,8 @@ github.com/Shopify/toxiproxy v2.1.4+incompatible/go.mod h1:OXgGpZ6Cli1/URJOF1DMx
 github.com/Yawning/aez v0.0.0-20180114000226-4dad034d9db2/go.mod h1:9pIqrY6SXNL8vjRQE5Hd/OL5GyK/9MrGUWs87z/eFfk=
 github.com/Yawning/aez v0.0.0-20211027044916-e49e68abd344 h1:cDVUiFo+npB0ZASqnw4q90ylaVAbnYyx0JYqK4YcGok=
 github.com/Yawning/aez v0.0.0-20211027044916-e49e68abd344/go.mod h1:9pIqrY6SXNL8vjRQE5Hd/OL5GyK/9MrGUWs87z/eFfk=
-github.com/ZeusLN/btcwallet v0.16.18-zeus2 h1:B/bYul4KsqaNSZPjPVcXuyiky1cWc6jX647UD+0w3Gk=
-github.com/ZeusLN/btcwallet v0.16.18-zeus2/go.mod h1:4TTru0cgIPbCZpY4aRfAVwX87zrQw4GXM8MH6+A5xZw=
+github.com/ZeusLN/btcwallet v0.16.19-7-zeus h1:JoTpNc81qWfgPoaPl0anzC5q6rMkhZnHnWzkcxik+wU=
+github.com/ZeusLN/btcwallet v0.16.19-7-zeus/go.mod h1:qhfYXizHFWUF+6UQb9EookQPQ+zY1fSTJopxvGY+b1s=
 github.com/ZeusLN/chantools v0.14.2-zeus h1:tCZeYbQmV8dgX/xZ4vEmO90cMFFq3+4GTDrgxsMiwNM=
 github.com/ZeusLN/chantools v0.14.2-zeus/go.mod h1:jmz0T0XEvSU6MrI/iz5eOlJPtaiwU2jCar5GAKX2y0s=
 github.com/ZeusLN/lightning-terminal v0.10.5-alpha-zeus h1:RI6YB5e1oZmvI/KtDJbPmzvEzYVslrJoZTUiZNgtCAE=
