@@ -53,6 +53,11 @@ var (
 type mobileClient struct {
 	lndConn *grpc.ClientConn
 
+	// cancelDial stops the dial started by ConnectServer. The dial blocks
+	// until it connects and retries on its own, so without it a dial that
+	// never connects runs until the process exits.
+	cancelDial context.CancelFunc
+
 	statusChecker func() mailbox.ClientStatus
 
 	mac *macaroon.Macaroon
@@ -65,6 +70,24 @@ type mobileClient struct {
 	authDataCallback         NativeCallback
 
 	mutex sync.Mutex
+}
+
+// stop cancels any dial in progress and closes the RPC connection. The caller
+// must hold mc.mutex.
+func (mc *mobileClient) stop() {
+	if mc.cancelDial != nil {
+		mc.cancelDial()
+		mc.cancelDial = nil
+	}
+
+	if mc.lndConn != nil {
+		if err := mc.lndConn.Close(); err != nil {
+			log.Errorf("Error closing RPC connection: %v", err)
+		}
+		mc.lndConn = nil
+	}
+
+	mc.statusChecker = nil
 }
 
 func newMobileClient() *mobileClient {
@@ -157,6 +180,15 @@ func InitLNC(nameSpace, debugLevel string) error {
 		interceptorLogsInitialize = true
 	}
 
+	// Stop the client being replaced. Its dial would otherwise keep
+	// running against the same mailbox session as the new client's, and
+	// the two would evict each other.
+	if old, ok := m[nameSpace]; ok {
+		old.mutex.Lock()
+		old.stop()
+		old.mutex.Unlock()
+	}
+
 	m[nameSpace] = newMobileClient()
 
 	log.Debugf("Mobile client ready for connecting")
@@ -192,21 +224,31 @@ func ConnectServer(nameSpace string, mailboxServer string, isDevServer bool,
 		}
 	}
 
+	mc, err := getClient(nameSpace)
+	if err != nil {
+		return err
+	}
+
+	// Replace any dial or connection this client already has, so two
+	// dials never compete for the same mailbox session.
+	ctx, cancel := context.WithCancel(context.Background())
+	mc.mutex.Lock()
+	mc.stop()
+	mc.cancelDial = cancel
+	mc.mutex.Unlock()
+
 	// Since the connection function is blocking, we need to spin it off
 	// in another goroutine here. See https://pkg.go.dev/syscall/js#FuncOf.
 	go func() {
-		mc, err := getClient(nameSpace)
-		if err != nil {
-			log.Errorf("Error getting client: %v", err)
-			return
-		}
-
-		statusChecker, lndConnect, err := mailbox.NewClientWebsocketConn(
-			mailboxServer, pairingPhrase, localPriv, remotePub,
+		statusChecker, lndConnect, err := newClientWebsocketConn(
+			ctx, mailboxServer, pairingPhrase, localPriv, remotePub,
 			func(key *btcec.PublicKey) error {
 				mc.mutex.Lock()
 				defer mc.mutex.Unlock()
 
+				// Reported even if the dial has been
+				// stopped: the key belongs to this pairing,
+				// and a pairing phrase is single use.
 				mc.remoteKeyReceiveCallback.SendResult(
 					hex.EncodeToString(
 						key.SerializeCompressed(),
@@ -248,23 +290,85 @@ func ConnectServer(nameSpace string, mailboxServer string, isDevServer bool,
 		}
 
 		mc.mutex.Lock()
-		mc.statusChecker = statusChecker
+		if ctx.Err() == nil {
+			mc.statusChecker = statusChecker
+		}
 		mc.mutex.Unlock()
 
 		lndConn, err := lndConnect()
 		if err != nil {
+			if ctx.Err() != nil {
+				log.Debugf("Mobile client dial stopped")
+				return
+			}
 			log.Errorf("Error running wasm client: %v", err)
 			return
 		}
 
 		mc.mutex.Lock()
+		defer mc.mutex.Unlock()
+
+		// Stopped after the dial connected but before it was
+		// recorded: close it rather than leave it unowned.
+		if ctx.Err() != nil {
+			if err := lndConn.Close(); err != nil {
+				log.Errorf("Error closing RPC connection: %v",
+					err)
+			}
+			return
+		}
+
 		mc.lndConn = lndConn
-		mc.mutex.Unlock()
 
 		log.Debugf("Mobile client connected to RPC")
 	}()
 
 	return nil
+}
+
+// newClientWebsocketConn is mailbox.NewClientWebsocketConn with a caller
+// supplied context. The upstream version dials on context.Background(), so
+// its dial can never be stopped.
+func newClientWebsocketConn(ctx context.Context, mailboxServer,
+	pairingPhrase string, localStatic keychain.SingleKeyECDH,
+	remoteStatic *btcec.PublicKey,
+	onRemoteStatic func(key *btcec.PublicKey) error,
+	onAuthData func(data []byte) error) (func() mailbox.ClientStatus,
+	func() (*grpc.ClientConn, error), error) {
+
+	words := strings.Split(pairingPhrase, " ")
+
+	var mnemonicWords [mailbox.NumPassphraseWords]string
+	copy(mnemonicWords[:], words)
+	entropy := mailbox.PassphraseMnemonicToEntropy(mnemonicWords)
+
+	connData := mailbox.NewConnData(
+		localStatic, remoteStatic, entropy[:], nil, onRemoteStatic,
+		onAuthData,
+	)
+
+	transportConn, err := mailbox.NewWebsocketsClient(
+		ctx, mailboxServer, connData,
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	noiseConn := mailbox.NewNoiseGrpcConn(connData)
+
+	dialOpts := []grpc.DialOption{
+		grpc.WithContextDialer(transportConn.Dial),
+		grpc.WithTransportCredentials(noiseConn),
+		grpc.WithPerRPCCredentials(noiseConn),
+		grpc.WithDefaultCallOptions(
+			grpc.MaxCallRecvMsgSize(1024 * 1024 * 200),
+		),
+		grpc.WithBlock(),
+	}
+
+	return transportConn.ConnStatus, func() (*grpc.ClientConn, error) {
+		return grpc.DialContext(ctx, mailboxServer, dialOpts...)
+	}, nil
 }
 
 // IsConnected returns whether or not there is an active connection.
@@ -280,7 +384,7 @@ func IsConnected(nameSpace string) (bool, error) {
 	return mc.lndConn != nil, nil
 }
 
-// Disconnect closes the RPC connection.
+// Disconnect stops any dial in progress and closes the RPC connection.
 func Disconnect(nameSpace string) error {
 	mc, err := getClient(nameSpace)
 	if err != nil {
@@ -290,12 +394,7 @@ func Disconnect(nameSpace string) error {
 	mc.mutex.Lock()
 	defer mc.mutex.Unlock()
 
-	if mc.lndConn != nil {
-		if err := mc.lndConn.Close(); err != nil {
-			log.Errorf("Error closing RPC connection: %v", err)
-		}
-		mc.lndConn = nil
-	}
+	mc.stop()
 
 	return nil
 }
@@ -395,7 +494,7 @@ func InvokeRPC(nameSpace string, rpcName string, requestJSON string,
 
 	method, ok := registry[rpcName]
 	if !ok {
-		return fmt.Errorf("rpc with name " + rpcName + " not found")
+		return fmt.Errorf("rpc with name %s not found", rpcName)
 	}
 
 	go func() {
