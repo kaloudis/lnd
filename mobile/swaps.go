@@ -59,7 +59,17 @@ func CreateClaimTransaction(endpoint string, id string, claimLeaf string, refund
 	if err != nil {
 		return fmt.Errorf("could not create signing session: %s", err)
 	}
-	partial, err := session.Sign([]byte(transactionHash), []byte(pubNonce))
+	transactionHashBytes, err := hex.DecodeString(transactionHash)
+	if err != nil {
+		return fmt.Errorf("Error decoding transaction hash hex: %s", err)
+	}
+
+	pubNonceBytes, err := hex.DecodeString(pubNonce)
+	if err != nil {
+		return fmt.Errorf("Error decoding pub nonce hex: %s", err)
+	}
+
+	partial, err := session.Sign(transactionHashBytes, pubNonceBytes)
 	if err != nil {
 		return fmt.Errorf("could not create partial signature: %s", err)
 	}
