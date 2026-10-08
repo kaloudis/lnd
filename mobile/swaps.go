@@ -24,6 +24,60 @@ func leaf(script string) txscript.TapLeaf {
 	}
 }
 
+// swapNetwork maps a network name to boltz-client's parameters. Signet and
+// testnet4 share testnet3's address encoding, which is all the claim and
+// refund builders use the network for.
+func swapNetwork(network string) (*boltz.Network, error) {
+	switch network {
+	case "mainnet", "bitcoin":
+		return boltz.MainNet, nil
+	case "testnet", "testnet3", "testnet4", "signet":
+		return boltz.TestNet, nil
+	case "regtest":
+		return boltz.Regtest, nil
+	default:
+		return nil, fmt.Errorf("unsupported network %q", network)
+	}
+}
+
+func legacyNetworkName(isTestnet bool) string {
+	if isTestnet {
+		return "testnet"
+	}
+	return "mainnet"
+}
+
+// swapKeysAndTree parses our private key and the service's public key and
+// initializes the swap tree with them.
+func swapKeysAndTree(claimLeaf string, refundLeaf string, privateKey string,
+	servicePubKey string) (*btcec.PrivateKey, *boltz.SwapTree, error) {
+
+	privKeyBytes, err := hex.DecodeString(privateKey)
+	if err != nil {
+		return nil, nil, fmt.Errorf("error decoding private key hex: %w", err)
+	}
+	keys, _ := btcec.PrivKeyFromBytes(privKeyBytes)
+
+	servicePubKeyBytes, err := hex.DecodeString(servicePubKey)
+	if err != nil {
+		return nil, nil, fmt.Errorf("error decoding service public key hex: %w", err)
+	}
+	servicePubKeyFormatted, err := secp256k1.ParsePubKey(servicePubKeyBytes)
+	if err != nil {
+		return nil, nil, fmt.Errorf("error parsing service public key: %w", err)
+	}
+
+	swapTree := &boltz.SwapTree{
+		ClaimLeaf:  leaf(claimLeaf),
+		RefundLeaf: leaf(refundLeaf),
+	}
+	if err := swapTree.Init(boltz.CurrencyBtc, false, keys, servicePubKeyFormatted); err != nil {
+		return nil, nil, fmt.Errorf("error initializing swap tree: %w", err)
+	}
+
+	return keys, swapTree, nil
+}
+
 func CreateClaimTransaction(endpoint string, id string, claimLeaf string, refundLeaf string, privateKey string, servicePubKey string, transactionHash string, pubNonce string) error {
 	swapTree := &boltz.SwapTree{
 		ClaimLeaf:  leaf(claimLeaf),
@@ -82,60 +136,34 @@ func CreateClaimTransaction(endpoint string, id string, claimLeaf string, refund
 	return nil
 }
 
-func CreateReverseClaimTransaction(endpoint string, id string, claimLeaf string, refundLeaf string, privateKey string, servicePubKey string, preimageHex string, transactionHex string, lockupAddress string, destinationAddress string, feeRate int32, minerFee int32, isTestnet bool) error {
-	var toCurrency = boltz.CurrencyBtc
-	var network *boltz.Network
-	if isTestnet {
-		network = boltz.TestNet
-	} else {
-		network = boltz.MainNet
-	}
-
-	boltzApi := &boltz.Api{URL: endpoint}
-
-	// Decode the hex string to bytes
-	privKeyBytes, err := hex.DecodeString(privateKey)
+// BuildReverseClaimTransaction builds and signs the claim of a reverse swap's
+// lockup and returns it as hex without broadcasting it. A cooperative claim
+// sends the preimage to the swap host while building, so the caller must keep
+// the returned transaction and keep broadcasting it until it confirms.
+func BuildReverseClaimTransaction(endpoint string, id string, claimLeaf string, refundLeaf string, privateKey string, servicePubKey string, preimageHex string, transactionHex string, lockupAddress string, destinationAddress string, feeRate int32, minerFee int32, network string) (string, error) {
+	chain, err := swapNetwork(network)
 	if err != nil {
-		fmt.Printf("Failed to decode hex string: %v", err)
+		return "", err
 	}
 
-	// Create the private key using btcec
-	keys, _ := btcec.PrivKeyFromBytes(privKeyBytes)
-
-	// Decode the hex string to bytes
-	servicePubKeyBytes, err := hex.DecodeString(servicePubKey)
+	keys, swapTree, err := swapKeysAndTree(claimLeaf, refundLeaf, privateKey, servicePubKey)
 	if err != nil {
-		return fmt.Errorf("Error decoding service public key hex: %s", err)
+		return "", err
 	}
 
-	// Parse the public key
-	servicePubKeyFormatted, err := secp256k1.ParsePubKey(servicePubKeyBytes)
+	lockupTransaction, err := boltz.NewTxFromHex(boltz.CurrencyBtc, transactionHex, nil)
 	if err != nil {
-		return fmt.Errorf("Error parsing service public key %s", err)
+		return "", fmt.Errorf("error constructing lockup tx: %w", err)
 	}
 
-	swapTree := &boltz.SwapTree{
-		ClaimLeaf:  leaf(claimLeaf),
-		RefundLeaf: leaf(refundLeaf),
-	}
-
-	if err := swapTree.Init(boltz.CurrencyBtc, false, keys, servicePubKeyFormatted); err != nil {
-		return fmt.Errorf("Error initializing swap tree %s", err)
-	}
-
-	lockupTransaction, err := boltz.NewTxFromHex(toCurrency, transactionHex, nil)
+	vout, _, err := lockupTransaction.FindVout(chain, lockupAddress)
 	if err != nil {
-		return fmt.Errorf("Error constructing lockup tx %s", err)
-	}
-
-	vout, _, err := lockupTransaction.FindVout(network, lockupAddress)
-	if err != nil {
-		return fmt.Errorf("Error finding vout %s", err)
+		return "", fmt.Errorf("error finding vout: %w", err)
 	}
 
 	preimage, err := hex.DecodeString(preimageHex)
 	if err != nil {
-		return fmt.Errorf("Error decoding preimage hex string: %w", err)
+		return "", fmt.Errorf("error decoding preimage hex string: %w", err)
 	}
 
 	var fee boltz.Fee
@@ -146,8 +174,9 @@ func CreateReverseClaimTransaction(endpoint string, id string, claimLeaf string,
 		satPerVbyte := float64(feeRate)
 		fee = boltz.Fee{SatsPerVbyte: &satPerVbyte}
 	}
+
 	claimTransaction, _, err := boltz.ConstructTransaction(
-		network,
+		chain,
 		boltz.CurrencyBtc,
 		[]boltz.OutputDetails{
 			{
@@ -163,114 +192,46 @@ func CreateReverseClaimTransaction(endpoint string, id string, claimLeaf string,
 			},
 		},
 		fee,
-		boltzApi,
+		&boltz.Api{URL: endpoint},
 	)
 	if err != nil {
-		return fmt.Errorf("could not create claim transaction: %w", err)
+		return "", fmt.Errorf("could not create claim transaction: %w", err)
 	}
 
 	txHex, err := claimTransaction.Serialize()
 	if err != nil {
-		return fmt.Errorf("could not serialize claim transaction: %w", err)
+		return "", fmt.Errorf("could not serialize claim transaction: %w", err)
 	}
 
-	var broadcastUrl string
-	if isTestnet {
-		broadcastUrl = "https://mempool.space/testnet/api/tx"
-	} else {
-		broadcastUrl = "https://mempool.space/api/tx"
-	}
-
-	// Create HTTP request
-	req, err := http.NewRequest("POST", broadcastUrl, bytes.NewBufferString(txHex))
-	if err != nil {
-		return fmt.Errorf("failed to create HTTP request: %v", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	// Execute HTTP request
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to send HTTP request: %v", err)
-	}
-	defer resp.Body.Close()
-
-	// Read response
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to read response body: %v", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("non-200 response: %d, body: %s", resp.StatusCode, string(body))
-	}
-
-	fmt.Printf("Transaction broadcasted successfully: %s\n", string(body))
-
-	return nil
+	return txHex, nil
 }
 
-func CreateRefundTransaction(endpoint string, id string, claimLeaf string, refundLeaf string, transactionHex string, privateKey string, servicePubKey string, feeRate int32, timeoutBlockHeight int32, destinationAddress string, lockupAddress string, cooperative bool, isTestnet bool) (string, error) {
-	var toCurrency = boltz.CurrencyBtc
-
-	var network *boltz.Network
-	if isTestnet {
-		network = boltz.TestNet
-	} else {
-		network = boltz.MainNet
-	}
-
-	boltzApi := &boltz.Api{URL: endpoint}
-
-	// Decode the hex string to bytes
-	privKeyBytes, err := hex.DecodeString(privateKey)
+// BuildRefundTransaction builds and signs the refund of a submarine swap's
+// lockup and returns it as hex without broadcasting it.
+func BuildRefundTransaction(endpoint string, id string, claimLeaf string, refundLeaf string, transactionHex string, privateKey string, servicePubKey string, feeRate int32, timeoutBlockHeight int32, destinationAddress string, lockupAddress string, cooperative bool, network string) (string, error) {
+	chain, err := swapNetwork(network)
 	if err != nil {
-		fmt.Printf("Failed to decode hex string: %v\n", err)
-		return "", fmt.Errorf("failed to decode hex string: %v", err)
+		return "", err
 	}
 
-	// Create the private key using btcec
-	keys, _ := btcec.PrivKeyFromBytes(privKeyBytes)
-
-	// Decode the hex string to bytes
-	servicePubKeyBytes, err := hex.DecodeString(servicePubKey)
+	keys, swapTree, err := swapKeysAndTree(claimLeaf, refundLeaf, privateKey, servicePubKey)
 	if err != nil {
-		return "", fmt.Errorf("error decoding service public key hex: %s", err)
+		return "", err
 	}
 
-	// Parse the public key
-	servicePubKeyFormatted, err := secp256k1.ParsePubKey(servicePubKeyBytes)
+	lockupTransaction, err := boltz.NewTxFromHex(boltz.CurrencyBtc, transactionHex, nil)
 	if err != nil {
-		return "", fmt.Errorf("error parsing service public key %s", err)
+		return "", fmt.Errorf("error constructing lockup tx: %w", err)
 	}
 
-	// Creating the swapTree
-	swapTree := &boltz.SwapTree{
-		ClaimLeaf:  leaf(claimLeaf),
-		RefundLeaf: leaf(refundLeaf),
-	}
-	fmt.Println("SwapTree created successfully")
-
-	if err := swapTree.Init(boltz.CurrencyBtc, false, keys, servicePubKeyFormatted); err != nil {
-		return "", fmt.Errorf("error initializing swap tree %s", err)
+	vout, _, err := lockupTransaction.FindVout(chain, lockupAddress)
+	if err != nil {
+		return "", fmt.Errorf("error finding vout: %w", err)
 	}
 
 	satPerVbyte := float64(feeRate)
-
-	lockupTransaction, err := boltz.NewTxFromHex(toCurrency, transactionHex, nil)
-	if err != nil {
-		return "", fmt.Errorf("error constructing lockup tx %v", err)
-	}
-	fmt.Println("Lockup transaction constructed successfully")
-
-	vout, _, err := lockupTransaction.FindVout(network, lockupAddress)
-	if err != nil {
-		return "", fmt.Errorf("error finding vout %s", err)
-	}
-
 	refundTransaction, _, err := boltz.ConstructTransaction(
-		network,
+		chain,
 		boltz.CurrencyBtc,
 		[]boltz.OutputDetails{
 			{
@@ -287,43 +248,41 @@ func CreateRefundTransaction(endpoint string, id string, claimLeaf string, refun
 			},
 		},
 		boltz.Fee{SatsPerVbyte: &satPerVbyte},
-		boltzApi,
+		&boltz.Api{URL: endpoint},
 	)
-
 	if err != nil {
 		return "", fmt.Errorf("could not create refund transaction: %w", err)
 	}
-	fmt.Println("Refund transaction constructed successfully")
 
 	txHex, err := refundTransaction.Serialize()
 	if err != nil {
 		return "", fmt.Errorf("could not serialize refund transaction: %w", err)
 	}
-	fmt.Println("Refund transaction serialized successfully")
 
-	var broadcastUrl string
+	return txHex, nil
+}
+
+// broadcastToMempoolSpace is the broadcast the Create* functions have always
+// done. Callers that can should use the Build* functions and broadcast
+// through the user's own explorer instead.
+func broadcastToMempoolSpace(txHex string, isTestnet bool) (string, error) {
+	broadcastUrl := "https://mempool.space/api/tx"
 	if isTestnet {
 		broadcastUrl = "https://mempool.space/testnet/api/tx"
-	} else {
-		broadcastUrl = "https://mempool.space/api/tx"
 	}
 
-	// Create HTTP request
 	req, err := http.NewRequest("POST", broadcastUrl, bytes.NewBufferString(txHex))
 	if err != nil {
 		return "", fmt.Errorf("failed to create HTTP request: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	// Execute HTTP request
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := (&http.Client{}).Do(req)
 	if err != nil {
 		return "", fmt.Errorf("failed to send HTTP request: %v", err)
 	}
 	defer resp.Body.Close()
 
-	// Read response
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", fmt.Errorf("failed to read response body: %v", err)
@@ -333,9 +292,30 @@ func CreateRefundTransaction(endpoint string, id string, claimLeaf string, refun
 		return "", fmt.Errorf("non-200 response: %d, body: %s", resp.StatusCode, string(body))
 	}
 
-	txid := string(body)
-	fmt.Printf("Transaction broadcasted successfully: %s\n", txid)
-	fmt.Println("Transaction broadcasted successfully")
+	return string(body), nil
+}
 
-	return txid, nil
+// CreateReverseClaimTransaction builds a reverse swap claim and broadcasts it
+// to mempool.space. Kept for app builds that predate
+// BuildReverseClaimTransaction.
+func CreateReverseClaimTransaction(endpoint string, id string, claimLeaf string, refundLeaf string, privateKey string, servicePubKey string, preimageHex string, transactionHex string, lockupAddress string, destinationAddress string, feeRate int32, minerFee int32, isTestnet bool) error {
+	txHex, err := BuildReverseClaimTransaction(endpoint, id, claimLeaf, refundLeaf, privateKey, servicePubKey, preimageHex, transactionHex, lockupAddress, destinationAddress, feeRate, minerFee, legacyNetworkName(isTestnet))
+	if err != nil {
+		return err
+	}
+
+	_, err = broadcastToMempoolSpace(txHex, isTestnet)
+	return err
+}
+
+// CreateRefundTransaction builds a submarine swap refund, broadcasts it to
+// mempool.space and returns the txid. Kept for app builds that predate
+// BuildRefundTransaction.
+func CreateRefundTransaction(endpoint string, id string, claimLeaf string, refundLeaf string, transactionHex string, privateKey string, servicePubKey string, feeRate int32, timeoutBlockHeight int32, destinationAddress string, lockupAddress string, cooperative bool, isTestnet bool) (string, error) {
+	txHex, err := BuildRefundTransaction(endpoint, id, claimLeaf, refundLeaf, transactionHex, privateKey, servicePubKey, feeRate, timeoutBlockHeight, destinationAddress, lockupAddress, cooperative, legacyNetworkName(isTestnet))
+	if err != nil {
+		return "", err
+	}
+
+	return broadcastToMempoolSpace(txHex, isTestnet)
 }
